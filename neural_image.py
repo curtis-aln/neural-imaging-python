@@ -10,6 +10,7 @@ import queue
 import cv2
 
 # file saving
+import os
 
 # nice printing colors
 from colorama import Fore, Style
@@ -35,7 +36,7 @@ hidden_layers = 4
 neurons_per_layer = 150
 activation_func = 'tanh'
 
-save_to_path = "network_data.pkl"
+save_to_path = "outputs/network_data.weights.h5"
 
 """ ~ ~ ~ ~ """
 
@@ -53,17 +54,6 @@ def load_image_from_file(image_path : str, desired_size: tuple) -> np.ndarray:
     img = cv2.imread(image_path)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     return cv2.resize(img, dsize=desired_size, interpolation=cv2.INTER_CUBIC)
-
-def load_model_from_file(image_path : str):
-    #with open(image_path, 'rb') as file:
-    #    loaded = pickle.load(file)
-    #return loaded
-    return None
-
-def write_model_to_file(image_path : str, model):
-    #with open(image_path, 'wb') as file:
-    #    pickle.dump(model, file)
-    pass
 
 
 def get_window_dims():
@@ -136,29 +126,27 @@ class NeuralImageGenerator:
     
 
     def train_model(self, save_model = True, hyper_res=False) -> tuple:
-        try:
-            # Create tf.data.Dataset pipeline
-            dataset = tf.data.Dataset.from_tensor_slices((self.input_data, self.target_output))
-            dataset = dataset.batch(batch_size).cache().prefetch(tf.data.AUTOTUNE)
-            
+         # Create a callback that saves the model's weights
+        cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=save_to_path, save_weights_only=True, verbose=1)
+
+        # Create tf.data.Dataset pipeline
+        dataset = tf.data.Dataset.from_tensor_slices((self.input_data, self.target_output))
+        dataset = dataset.batch(batch_size).cache().prefetch(tf.data.AUTOTUNE)
+        
+        try: 
             self.model.compile(optimizer='adam', loss='mse')
             self.model.fit(
                 dataset, 
                 epochs=epochs,
-                callbacks=[self.loss_callback]
+                callbacks=[self.loss_callback, cp_callback]
             )
         except KeyboardInterrupt:
-            user_input = input(Fore.BLUE + "\nTraining stopped. would you like to save the current training progress? y/n " + Style.RESET_ALL)
-            save_model = user_input == "y"
+            print(Fore.Red + "\nTraining stopped. Compiling Results. . ." + Style.RESET_ALL)
         
         print("==== Evaluating model ==== ")
         evalutation = self.model.evaluate(self.input_data, self.target_output, verbose=2)
         
         prediction, size = self.get_prediction(hyper_res)
-
-        if save_model:
-            write_model_to_file(save_to_path, self.model)
-            print(Fore.GREEN + f"Model saved to {save_to_path}" + Style.RESET_ALL)
     
         return prediction, evalutation, size
    
@@ -194,13 +182,14 @@ class NeuralImageGenerator:
         return normalized.reshape(image_size[0] * image_size[1], 3)
 
     def load_model(self):
-        model = load_model_from_file(save_to_path)
-        if (model != None):
-            print(Fore.BLUE + f"A model has been retrived from '{save_to_path}'")
-            model.summary()
-            if input(Fore.BLUE + "would you like to continue training with this model? y/n " + Style.RESET_ALL) == 'y':
-                self.model = model
-
+        if not os.path.exists(save_to_path):
+            print(Fore.RED + "No previous save file exists, creating new model" + Style.RESET_ALL)
+            return
+        
+        print(Fore.BLUE + f"A model has been retrived from '{save_to_path}'")
+        if input(Fore.BLUE + "would you like to continue training with this model? y/n " + Style.RESET_ALL) == 'y':            
+            self.model.load_weights(save_to_path)
+      
 
     def create_model(self):
         # we create a tensorflow sequential model 7 inputs to 3 outputs

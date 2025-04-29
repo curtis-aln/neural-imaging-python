@@ -87,5 +87,6 @@ if __name__ == "__main__":
     generator = NeuralImageGenerator(load_model=True)
     renderer = MatplotLibRendering(generator, generator.get_losses())
     predictions, size = generator.get_prediction(hyper_res=True)
+    
     print(f"size: {size}")
     renderer.render(predictions, size, save_to_file=True)

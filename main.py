@@ -1,5 +1,4 @@
 # TODO:
-# Push code to github
 # allow file saving for new model
 # autosaving every n minutes
 # ability to generate a video at the end
