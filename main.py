@@ -1,5 +1,13 @@
 # TODO:
-# ability to generate a video at the end
+# Ability to continue adding to the same video
+# Hyper-resolution video generation mode
+# multiple save files
+# program can train through a whole file of photos
+# program can train on videos
+
+# Inquireries
+# What happens if we feed it two images training data
+# seemless transitions
 
 from neural_image import *
 from matplotlib_rendering import MatplotLibRendering

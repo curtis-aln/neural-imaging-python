@@ -1,7 +1,7 @@
 # Neural Networking
 import tensorflow as tf
 import numpy as np
-from siren_model import Sine, build_siren_model
+from siren_model import Sine, build_siren_model, ModelConfig
 
 # video recording & file saving
 import cv2
@@ -20,21 +20,18 @@ print(Fore.CYAN + f'TensorFlow Version: {tf.__version__}' + Style.RESET_ALL)
 
 """ Settings """
 epochs = 50000
-image_path = "images/calculator.png"
+image_path = "images/bee.png"
 
-aspect_ratio = 1920 / 1080
+aspect_ratio = 1024/683 #1920 / 1080
 height = 256
 image_size = (int(height * aspect_ratio), height)
 
-batch_size = 100_000
-print(Fore.GREEN + "Batch Size: " + Style.RESET_ALL, batch_size)
+hidden_layers = 6
+neurons_per_layer = 175
 
-hidden_layers = 4
-neurons_per_layer = 150
-activation_func = 'tanh'
-
-save_to_path = "outputs/network_data.weights.h5"
-video_path = "outputs/training_video.mp4"
+weights_save_path = "outputs/network_data.weights.h5"
+video_save_path = "outputs/training_video.mp4"
+video_frame_rate = 144
 
 """ ~ ~ ~ ~ """
 
@@ -72,19 +69,28 @@ class NeuralImageGenerator:
         self.target_output = self.create_output_data()
 
         # creating the model we use for training
-        self.model = build_siren_model(7, hidden_layers, neurons_per_layer, 1)
+        config = ModelConfig(
+            input_dim=7,
+            hidden_layers=14,
+            hidden_units=256,
+            w0=1.0,
+            w0_initial=30.0,
+            final_activation='sigmoid'
+        )
+
+        self.model = build_siren_model(config)
         if load_model:
             self.load_model()
         self.model.summary()
         
         # for recording loss over time
         self.loss_callback = LossHistory()
-        self.video_callback = VideoCallback(self, save_every=1, resolution=image_size, output_path=video_path)
+        self.video_callback = VideoCallback(self, save_every=1, resolution=image_size, output_path=video_save_path)
     
 
     def train_model(self, save_model = True, hyper_res=False) -> tuple:
          # Create a callback that saves the model's weights
-        cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=save_to_path, save_weights_only=True, verbose=1, mode='max', save_best_only='true')
+        cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=weights_save_path, save_weights_only=True, verbose=1, mode='max', save_best_only='true')
 
         # Create tf.data.Dataset pipeline
         dataset = tf.data.Dataset.from_tensor_slices((self.input_data, self.target_output))
@@ -103,7 +109,7 @@ class NeuralImageGenerator:
             print(Fore.RED + "\nTraining stopped. Compiling Results. . ." + Style.RESET_ALL)
         
         print("==== Saving Video ==== ")
-        self.video_callback.save_video()
+        self.video_callback.save_video(fps=video_frame_rate)
 
         print("==== Evaluating model ==== ")
         evalutation = self.model.evaluate(self.input_data, self.target_output, verbose=2)
@@ -147,13 +153,13 @@ class NeuralImageGenerator:
         return normalized.reshape(image_size[0] * image_size[1], 3)
 
     def load_model(self):
-        if not os.path.exists(save_to_path):
+        if not os.path.exists(weights_save_path):
             print(Fore.RED + "No previous save file exists, creating new model" + Style.RESET_ALL)
             return
         
-        print(Fore.BLUE + f"A model has been retrived from '{save_to_path}'")
+        print(Fore.BLUE + f"A model has been retrived from '{weights_save_path}'")
         if input(Fore.BLUE + "would you like to continue training with this model? y/n " + Style.RESET_ALL) == 'y':            
-            self.model.load_weights(save_to_path)
+            self.model.load_weights(weights_save_path)
       
 
     def create_model(self):
