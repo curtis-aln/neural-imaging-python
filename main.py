@@ -1,6 +1,4 @@
 # TODO:
-# allow file saving for new model
-# autosaving every n minutes
 # ability to generate a video at the end
 
 from neural_image import *

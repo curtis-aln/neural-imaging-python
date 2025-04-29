@@ -1,16 +1,13 @@
 # Neural Networking
 import tensorflow as tf
 import numpy as np
+from siren_model import Sine, build_siren_model
 
-# optimization with multithreading
-import threading
-import queue
-
-# video recording
+# video recording & file saving
 import cv2
-
-# file saving
 import os
+
+from video_callback import VideoCallback
 
 # nice printing colors
 from colorama import Fore, Style
@@ -37,6 +34,7 @@ neurons_per_layer = 150
 activation_func = 'tanh'
 
 save_to_path = "outputs/network_data.weights.h5"
+video_path = "outputs/training_video.mp4"
 
 """ ~ ~ ~ ~ """
 
@@ -64,48 +62,6 @@ def get_window_dims():
     return width, height
 
 
-class Sine(tf.keras.layers.Layer):
-    def __init__(self, w0=1.0):
-        super().__init__()
-        self.w0 = w0
-
-    def call(self, inputs):
-        return tf.sin(self.w0 * inputs)
-
-# Custom Weight Initializer
-class SIRENInitializer(tf.keras.initializers.Initializer):
-    def __init__(self, w0=1.0):
-        self.w0 = w0
-
-    def __call__(self, shape, dtype=None):
-        input_dim = shape[0]
-        limit = np.sqrt(6 / input_dim) / self.w0
-        return tf.random.uniform(shape, minval=-limit, maxval=limit, dtype=dtype)
-
-# Building the full model
-def build_siren_model(input_dim, hidden_layers=15, hidden_units=200, w0=30.0, final_activation='sigmoid'):
-    inputs = tf.keras.Input(shape=(input_dim,))
-
-    # First layer
-    x = tf.keras.layers.Dense(
-        hidden_units,
-        kernel_initializer=SIRENInitializer(w0=1.0),
-        use_bias=False)(inputs)
-    x = Sine(w0=1.0)(x)
-
-    # Hidden layers
-    for _ in range(hidden_layers):
-        x = tf.keras.layers.Dense(
-            hidden_units,
-            kernel_initializer=SIRENInitializer(w0=w0))(x)
-        x = Sine(w0=w0)(x)
-
-    # Output layer
-    outputs = tf.keras.layers.Dense(3, activation=final_activation)(x)
-
-    model = tf.keras.Model(inputs, outputs)
-    return model
-
 class NeuralImageGenerator:
     def __init__(self, load_model = False):
         # loading the image with our desired shape and resolution
@@ -123,11 +79,12 @@ class NeuralImageGenerator:
         
         # for recording loss over time
         self.loss_callback = LossHistory()
+        self.video_callback = VideoCallback(self, save_every=1, resolution=image_size, output_path=video_path)
     
 
     def train_model(self, save_model = True, hyper_res=False) -> tuple:
          # Create a callback that saves the model's weights
-        cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=save_to_path, save_weights_only=True, verbose=1)
+        cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=save_to_path, save_weights_only=True, verbose=1, mode='max', save_best_only='true')
 
         # Create tf.data.Dataset pipeline
         dataset = tf.data.Dataset.from_tensor_slices((self.input_data, self.target_output))
@@ -138,11 +95,14 @@ class NeuralImageGenerator:
             self.model.fit(
                 dataset, 
                 epochs=epochs,
-                callbacks=[self.loss_callback, cp_callback]
+                callbacks=[self.loss_callback, cp_callback, self.video_callback]
             )
         except KeyboardInterrupt:
-            print(Fore.Red + "\nTraining stopped. Compiling Results. . ." + Style.RESET_ALL)
+            print(Fore.RED + "\nTraining stopped. Compiling Results. . ." + Style.RESET_ALL)
         
+        print("==== Saving Video ==== ")
+        self.video_callback.save_video()
+
         print("==== Evaluating model ==== ")
         evalutation = self.model.evaluate(self.input_data, self.target_output, verbose=2)
         
@@ -151,7 +111,10 @@ class NeuralImageGenerator:
         return prediction, evalutation, size
    
     def get_prediction(self, hyper_res=False):
-        size = (1920, 1080) if hyper_res else image_size
+        if not hyper_res:
+            return self.model.predict(self.input_data), image_size
+
+        size = (1920, 1080)
         input_space = self.create_input_data(size)
         return self.model.predict(input_space), size
 
