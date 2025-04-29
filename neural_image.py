@@ -88,7 +88,9 @@ class NeuralImageGenerator:
 
         # Create tf.data.Dataset pipeline
         dataset = tf.data.Dataset.from_tensor_slices((self.input_data, self.target_output))
-        dataset = dataset.batch(batch_size).cache().prefetch(tf.data.AUTOTUNE)
+        #dataset = dataset.batch(batch_size).cache().prefetch(tf.data.AUTOTUNE)
+
+        dataset = dataset.batch(self.input_data.shape[0])  # Whole image in one batch
         
         try: 
             self.model.compile(optimizer='adam', loss='mse')

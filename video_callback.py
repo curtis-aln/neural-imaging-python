@@ -18,10 +18,19 @@ class VideoCallback(tf.keras.callbacks.Callback):
         self.frames = []
         self.output_path = output_path
 
-    def on_epoch_end(self, epoch, logs=None):
+    def on_epoch_end_old(self, epoch, logs=None):
         if epoch % self.save_every == 0:
             print(Fore.YELLOW + f"\n[VideoCallback] Generating frame at epoch {epoch}..." + Style.RESET_ALL)
             self.generate_frame()
+    
+    def on_epoch_end(self, epoch, logs=None):
+        if epoch % self.save_every == 0:
+            print(Fore.YELLOW + f"\n[VideoCallback] Generating frame at epoch {epoch}..." + Style.RESET_ALL)
+            coords = self.model_ref.input_data  # Already full-size input
+            preds = self.model_ref.model(coords, training=False).numpy()
+            frame = (preds.reshape((*self.resolution[::-1], 3)) * 255).astype(np.uint8)
+            self.frames.append(frame)
+
 
     def on_train_end(self, logs=None):
         print(Fore.CYAN + "\n[VideoCallback] Saving final video..." + Style.RESET_ALL)
