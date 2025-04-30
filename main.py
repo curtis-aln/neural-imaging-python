@@ -15,10 +15,8 @@ from network.neural_image import *
 from matplotlib_rendering import MatplotLibRendering
 
 img_generator = NeuralImageGenerator(load_model=True)
-predictions, image_sizes = img_generator.train_model(save_model=True)
-
+predictions, image_sizes, training_images = img_generator.train_model(save_model=True)
 
 rendering = MatplotLibRendering(img_generator)
-
-#rendering.render(prediction, size)
+rendering.render(predictions, image_sizes, training_images)
 

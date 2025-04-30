@@ -17,11 +17,24 @@ import tkinter as tk
 
 
 
+import sys
+class SingleLineLogger(tf.keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        msg = f"\rEpoch {epoch+1} | " + " | ".join([f"{k}: {v:.4f}" for k, v in logs.items()])
+        sys.stdout.write(msg)
+        sys.stdout.flush()
+
+    def on_train_end(self, logs=None):
+        print()  # move to new line after training
+
+
+
 print(Fore.CYAN + f'TensorFlow Version: {tf.__version__}' + Style.RESET_ALL)
 
 """ Settings """
-epochs_per_image = 30
-video_frame_rate = 10
+epochs_per_image = 40
+video_frame_rate = 30
 
 height = 100 #256
 
@@ -126,7 +139,7 @@ class NeuralImageGenerator:
     def train_model(self, save_model = True, hyper_res=False) -> tuple:
         # Create a callback that saves the model's weights
         cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=weights_save_path, save_weights_only=True, verbose=1, mode='max', save_best_only='true')
-        callbacks = [self.loss_callback, cp_callback, self.video_callback]
+        callbacks = [self.loss_callback, cp_callback, self.video_callback, SingleLineLogger()]
         
         # each model is trained one after the other
         image_index = 0
@@ -144,13 +157,13 @@ class NeuralImageGenerator:
             
 
             print("==== Evaluating model ==== ")
-            self.preditions.append(self.get_prediction(image_index, hyper_res))
+            self.preditions.append(self.get_prediction(image_index, hyper_res)[0])
             
             if exeption:
                 break
             image_index += 1
         
-        return self.preditions, self.image_sizes
+        return self.preditions, self.image_sizes, self.images
 
 
     def fit_image(self, dataset, call_backs, name):
@@ -160,7 +173,8 @@ class NeuralImageGenerator:
             self.model.fit(
                     dataset, 
                     epochs=epochs_per_image,
-                    callbacks=call_backs)
+                    callbacks=call_backs,
+                    verbose=0)
         except KeyboardInterrupt: 
             print(Fore.RED + "\nTraining stopped. Compiling Results. . ." + Style.RESET_ALL)
             exeption = True
@@ -170,7 +184,7 @@ class NeuralImageGenerator:
             
         
    
-    def get_prediction(self, index, hyper_res=False):
+    def get_prediction(self, index, hyper_res=False) -> tuple[np.ndarray, tuple]:
         original_size = self.image_sizes[index]
         inp_data = self.images_inputs[index]
 
