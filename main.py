@@ -9,15 +9,16 @@
 # What happens if we feed it two images training data
 # seemless transitions
 
-from neural_image import *
+# bee took about 5000 epochs
+
+from network.neural_image import *
 from matplotlib_rendering import MatplotLibRendering
 
 img_generator = NeuralImageGenerator(load_model=True)
-prediction, evalutation, size = img_generator.train_model(save_model=True)
+predictions, image_sizes = img_generator.train_model(save_model=True)
 
-print(Fore.GREEN + '\nTest loss:' + Style.RESET_ALL, round(evalutation))
 
 rendering = MatplotLibRendering(img_generator)
 
-rendering.render(prediction, size)
+#rendering.render(prediction, size)
 

@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import numpy as np
 
-from neural_image import *
+from network.neural_image import *
 
 from PIL import Image
 
@@ -31,7 +31,7 @@ class MatplotLibRendering:
 
         if (save_to_file):
             im = Image.fromarray(predictions)
-            im.save("result.png")
+            im.save(final_image_save_path)
 
         fig = plt.figure(figsize=(12, 8))
         fig.patch.set_facecolor('#f7f7f7')  # Soft background
@@ -87,6 +87,6 @@ if __name__ == "__main__":
     generator = NeuralImageGenerator(load_model=True)
     renderer = MatplotLibRendering(generator, generator.get_losses())
     predictions, size = generator.get_prediction(hyper_res=True)
-    
+
     print(f"size: {size}")
     renderer.render(predictions, size, save_to_file=True)
