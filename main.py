@@ -12,11 +12,10 @@
 # bee took about 5000 epochs
 
 from network.neural_image import *
-from matplotlib_rendering import MatplotLibRendering
+from matplotlib_rendering import PredictionSlideshow
 
 img_generator = NeuralImageGenerator(load_model=True)
 predictions, image_sizes, training_images = img_generator.train_model(save_model=True)
 
-rendering = MatplotLibRendering(img_generator)
-rendering.render(predictions, image_sizes, training_images)
+rendering = PredictionSlideshow(predictions, image_sizes, training_images)
 
