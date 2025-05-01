@@ -33,17 +33,17 @@ class SingleLineLogger(tf.keras.callbacks.Callback):
 print(Fore.CYAN + f'TensorFlow Version: {tf.__version__}' + Style.RESET_ALL)
 
 """ Settings """
-epochs_per_image = 40
+epochs_per_image = 2000
 video_frame_rate = 30
 
-height = 100 #256
+height = 256 #256
 
 
  # creating the model we use for training
 config = ModelConfig(
     input_dim=7,
-    hidden_layers=8,
-    hidden_units=100,
+    hidden_layers=15,
+    hidden_units=180,
     w0=1.0,
     w0_initial=30.0,
     final_activation='sigmoid'

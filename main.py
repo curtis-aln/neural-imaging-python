@@ -1,8 +1,6 @@
 # TODO:
 # Ability to continue adding to the same video
 # Hyper-resolution video generation mode
-# multiple save files
-# program can train through a whole file of photos
 # program can train on videos
 
 # Inquireries
