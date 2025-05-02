@@ -26,7 +26,7 @@ class NeuralImageGenerator:
     def __init__(self, load_model = False):
         # loading the images and the videos from memory
         images, image_names = load_all_media_from_folder(image_dataset_path, image_longest_length, media_type='images')
-        videos, video_names = load_all_media_from_folder(video_dataset_path, image_longest_length, media_type='videos')
+        videos, video_names = load_all_media_from_folder(video_dataset_path, image_longest_length, media_type='videos', frame_count=frames_max)
 
         # determining whether the media type is video or image
         self.is_training_images = len(images) != 0
@@ -39,19 +39,20 @@ class NeuralImageGenerator:
         self.training_media, self.training_names = (images, image_names) if self.is_training_images else (videos, video_names)
         
         # each media will have their own size and aspect ratio which needs to be fetched to create their own input space
-        self.media_sizes = get_media_shapes(self.training_media, self.is_training_images)
+        self.media_frame_sizes = get_media_shapes(self.training_media, self.is_training_images)
 
-        # creating the input data from the media sizes | automatically adjusts for videos
-        self.input_space = [create_input_data(size) for size in self.media_sizes]
 
         # Flattening the data so that we can map it to the input space and feed into into the tensorflow trainer
-        self.normalized_images = [normalize_and_reshape_media(media) for media in self.training_media]
+        self.normalized_media = [normalize_and_reshape_media(media, self.is_training_images) for media in self.training_media]
+
+        # creating the input data from the media sizes | automatically adjusts for videos
+        self.input_space = [create_input_data(video.shape) for video in videos]
 
         # creating the training datasets
-        self.datasets = [self.create_dataset(inp, norm) for inp, norm in zip(self.input_space, self.normalized_images)]
-
-        print("norm images shape", self.normalized_images[0].shape)
-        print("input space shape", self.input_space[0].shape)
+        print("videos shape", videos[0].shape)
+        print("inp space shape", self.input_space[0].shape)
+        print("normalized media shape", self.normalized_media[0].shape)
+        self.datasets = [self.create_dataset(inp, norm) for inp, norm in zip(self.input_space, self.normalized_media)]
 
         # loading and compiling the model using SIREN
         self.model = build_siren_model(config)
@@ -65,7 +66,7 @@ class NeuralImageGenerator:
         self.preditions = []
         
         # Important callbacks during training
-        self.video_callback = VideoCallback(self, save_every=1, resolution=self.media_sizes[0])
+        self.video_callback = VideoCallback(self, save_every=1, resolution=self.media_frame_sizes[0])
         cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=weights_save_path, 
                                                          save_weights_only=True, verbose=1, mode='max', save_best_only=True)
         self.callbacks = [LossHistory(), cp_callback, SingleLineLogger()]
@@ -77,7 +78,7 @@ class NeuralImageGenerator:
     def train_model(self, hyper_res=False) -> tuple: # todo give these params a use        
         
         image_index = 0 # each model is trained one after the other
-        for dataset, name, size in zip(self.datasets, self.training_names, self.media_sizes):
+        for dataset, name, size in zip(self.datasets, self.training_names, self.media_frame_sizes):
             self.video_callback.reset(size, image_index)
 
             exeption = self.fit_image(dataset, self.callbacks, name)
@@ -90,7 +91,8 @@ class NeuralImageGenerator:
                 self.video_callback.save_video(fps=video_frame_rate, output_path=path)
 
             else:
-                convert_predictions_to_video(prediction, final_predictions_save_path, video_predictions_fps, size)
+                path = final_predictions_save_path + name + ".mp4"
+                convert_predictions_to_video(prediction, path, frames_max, size, video_predictions_fps)
             
             print("==== Evaluating model ==== ")
             self.preditions.append(prediction)
@@ -99,7 +101,7 @@ class NeuralImageGenerator:
                 break
             image_index += 1
         
-        return self.preditions, self.media_sizes, self.training_media
+        return self.preditions, self.media_frame_sizes, self.training_media
 
 
     def fit_image(self, dataset, call_backs, name):
@@ -121,7 +123,7 @@ class NeuralImageGenerator:
         
    
     def get_prediction(self, index, hyper_res=False) -> tuple[np.ndarray, tuple]:
-        original_size = self.media_sizes[index]
+        original_size = self.media_frame_sizes[index]
         inp_data = self.input_space[index]
 
         if not hyper_res:

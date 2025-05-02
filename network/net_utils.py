@@ -88,8 +88,30 @@ def load_video_from_file(video_path: str, desired_shortest_side: int) -> np.ndar
     cap.release()
     return np.array(frames)  # Return a numpy array of frames
 
+
+def reduce_video_to_frame_count(video_array: np.ndarray, frame_count: int) -> np.ndarray:
+    """
+    Reduces the number of frames in a video to the desired count by uniform skipping.
+
+    :param video_array: A NumPy array of shape (num_frames, height, width, 3)
+    :param frame_count: The desired number of frames
+    :return: A NumPy array of shape (frame_count, height, width, 3)
+    """
+    original_frame_count = video_array.shape[0]
+
+    if frame_count >= original_frame_count:
+        print(f"Requested {frame_count} frames, but video only has {original_frame_count}. Returning original.")
+        return video_array
+
+    # Get indices to sample uniformly
+    indices = np.linspace(0, original_frame_count - 1, frame_count, dtype=int)
+    reduced_video = video_array[indices]
+
+    return reduced_video
+
+
 # General function to load either images or videos from a folder
-def load_all_media_from_folder(folder_path: str, desired_shortest_side: int, media_type: str = 'images') -> list:
+def load_all_media_from_folder(folder_path: str, desired_shortest_side: int, media_type: str = 'images', frame_count = 60) -> list:
     supported_image_extensions = {'.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.webp'}
     supported_video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.flv'}
 
@@ -112,7 +134,9 @@ def load_all_media_from_folder(folder_path: str, desired_shortest_side: int, med
         elif media_type == 'videos' and file_extension in supported_video_extensions:
             try:
                 video_frames = load_video_from_file(media_path, desired_shortest_side)
-                media_files.append(video_frames)
+                reduced = reduce_video_to_frame_count(video_frames, frame_count)
+                media_files.append(reduced)
+
             except Exception as e:
                 print(f"Skipping {filename}: {e}")
 
@@ -129,44 +153,54 @@ def get_window_dims():
     return width, height
 
 
-
 def create_input_data(size):
     """
     Creates input data for images or videos. The input data includes spatial
     coordinates (Cartesian and polar) and an additional time value for videos.
     The time value is set to 0 for images.
-    
-    :param size: Tuple of size (sx, sy) for images or (sx, sy, num_frames) for videos
+
+    :param size: Tuple of size (sx, sy) for images or (num_frames, sx, sy) for videos
     :return: Concatenated array of spatial and time-related data
     """
-    # Check if size has 3 dimensions (indicating video with time)
-    if len(size) == 3:
-        sx, sy, num_frames = size
-        time_vals = np.linspace(0, 1, num_frames)  # Create a time range from 0 to 1
+    if len(size) == 4: # frame, x, y, col
+        num_frames, sx, sy, col = size
+        time_vals = np.linspace(0, 1, num_frames)
+
+        # Spatial grid
+        x, y = np.meshgrid(np.linspace(0, 1, sx), np.linspace(0, 1, sy), indexing='xy')
+        input_space_TL = np.column_stack((x.ravel(), y.ravel()))
+        input_space_BR = np.column_stack(((1 - x).ravel(), (1 - y).ravel()))
+        dx, dy = x - 0.5, y - 0.5
+        r = np.sqrt(dx**2 + dy**2)
+        theta = np.arctan2(dy, dx)
+        polar_space = np.column_stack((r.ravel(), np.sin(theta).ravel(), np.cos(theta).ravel()))
+
+        # Repeat spatial info for each frame
+        spatial = np.concatenate((input_space_TL, input_space_BR, polar_space), axis=1)
+        spatial_repeated = np.tile(spatial, (num_frames, 1))
+
+        # Time values for each frame
+        time_space = np.repeat(time_vals, sx * sy).reshape(-1, 1)
+
+        return np.concatenate((spatial_repeated, time_space), axis=1)
+
+
     else:
         sx, sy = size
-        time_vals = np.zeros(1)  # For images, time is always 0
-    
-    x, y = np.meshgrid(np.linspace(0, 1, sx), np.linspace(0, 1, sy), indexing='xy')
+        x, y = np.meshgrid(np.linspace(0, 1, sx), np.linspace(0, 1, sy), indexing='xy')
+        input_space_TL = np.column_stack((x.ravel(), y.ravel()))
+        input_space_BR = np.column_stack(((1 - x).ravel(), (1 - y).ravel()))
+        dx, dy = x - 0.5, y - 0.5
+        r = np.sqrt(dx**2 + dy**2)
+        theta = np.arctan2(dy, dx)
+        polar_space = np.column_stack((r.ravel(), np.sin(theta).ravel(), np.cos(theta).ravel()))
+        time_space = np.zeros((sx * sy, 1))
 
-    # Cartesian Top-Left & Bottom-Right
-    input_space_TL = np.column_stack((x.ravel(), y.ravel()))
-    input_space_BR = np.column_stack(((1 - x).ravel(), (1 - y).ravel()))
-
-    # Polar (centered)
-    dx, dy = x - 0.5, y - 0.5
-    r = np.sqrt(dx**2 + dy**2)
-    theta = np.arctan2(dy, dx)
-    polar_space = np.column_stack((r.ravel(), np.sin(theta).ravel(), np.cos(theta).ravel()))
-
-    # Add the time values (broadcasting time_val across all spatial points)
-    time_space = np.repeat(time_vals, sx * sy).reshape(-1, 1)
-    
-    # [TL.x, TL.y, BR.x, BR.y, R, Sin, Cos, time_val]
-    return np.concatenate((input_space_TL, input_space_BR, polar_space, time_space), axis=1)
+        return np.concatenate((input_space_TL, input_space_BR, polar_space, time_space), axis=1)
 
 
-def normalize_and_reshape_media(media, media_type='image'):
+
+def normalize_and_reshape_media(media, is_image):
     """
     Normalizes and reshapes the media (either an image or a video).
     
@@ -177,41 +211,44 @@ def normalize_and_reshape_media(media, media_type='image'):
     # Normalize media to range [0, 1]
     normalized = media / 255.0
 
-    if media_type == 'image':
+    if is_image:
         height, width = media.shape[:2]
         return normalized.reshape(height * width, 3)
 
-    elif media_type == 'video':
-        return normalized.reshape(-1)  # Flatten all frames into 1D
+    shape = media.shape
+    flattened = normalized.reshape(shape[0] * shape[1] * shape[2], shape[3])
+    return flattened
 
 
-
-def convert_predictions_to_video(predictions, output_path, frame_rate=30, resolution=(256, 256)):
+def convert_predictions_to_video(predictions, output_path, num_frames, resolution, frame_rate=30):
     """
-    Converts a sequence of network predictions (frames) into an MP4 video.
+    Converts flattened network predictions into an MP4 video.
 
-    :param predictions: List or array of frames (each frame should be of shape (height, width, 3)).
-    :param output_path: Path where the output video will be saved (e.g., 'output_video.mp4').
-    :param frame_rate: Frame rate of the video (default is 30 fps).
-    :param resolution: Resolution of the video (height, width), defaults to (256, 256).
-    :return: None
+    :param predictions: Flattened array of shape (num_frames * height * width, 3).
+    :param output_path: Path to save the output video (e.g. 'output.mp4').
+    :param num_frames: Number of frames in the video.
+    :param resolution: (height, width) of each frame.
+    :param frame_rate: FPS of the output video.
     """
-    # Initialize the VideoWriter object with the desired output path, codec, frame rate, and resolution
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 'mp4v' is the codec for MP4 files
-    out = cv2.VideoWriter(output_path, fourcc, frame_rate, resolution)
+    height, width = resolution
+    pixels_per_frame = height * width
 
-    # Write each frame to the video
-    for frame in predictions:
-        # Ensure the frame is in the correct format (uint8, RGB)
-        frame = np.clip(frame, 0, 255).astype(np.uint8)
-        
-        # Resize frame if necessary
-        if frame.shape[0] != resolution[0] or frame.shape[1] != resolution[1]:
-            frame = cv2.resize(frame, resolution)
+    # Check for consistent size
+    expected_total_pixels = num_frames * pixels_per_frame
+    if predictions.shape[0] != expected_total_pixels:
+        raise ValueError(f"Prediction size mismatch: expected {expected_total_pixels} pixels, got {predictions.shape[0]}")
 
-        # Write the frame to the video
-        out.write(frame)
+    # Reshape predictions to (num_frames, height, width, 3)
+    reshaped = predictions.reshape((num_frames, height, width, 3))
 
-    # Release the VideoWriter object after writing all frames
+    # Initialize VideoWriter
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_path, fourcc, frame_rate, (width, height))
+
+    for frame in reshaped:
+        # Convert from RGB to BGR for OpenCV
+        frame_bgr = cv2.cvtColor(np.clip(frame, 0, 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
+        out.write(frame_bgr)
+
     out.release()
     print(f"Video saved to {output_path}")
