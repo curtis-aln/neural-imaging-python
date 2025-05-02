@@ -33,7 +33,7 @@ class SingleLineLogger(tf.keras.callbacks.Callback):
 print(Fore.CYAN + f'TensorFlow Version: {tf.__version__}' + Style.RESET_ALL)
 
 """ Settings """
-epochs_per_image = 2000
+epochs_per_image = 1500
 video_frame_rate = 30
 
 height = 256 #256
@@ -138,7 +138,7 @@ class NeuralImageGenerator:
 
     def train_model(self, save_model = True, hyper_res=False) -> tuple:
         # Create a callback that saves the model's weights
-        cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=weights_save_path, save_weights_only=True, verbose=1, mode='max', save_best_only='true')
+        cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=weights_save_path, save_weights_only=True, verbose=1, mode='max', save_best_only=True)
         callbacks = [self.loss_callback, cp_callback, self.video_callback, SingleLineLogger()]
         
         # each model is trained one after the other
