@@ -11,7 +11,7 @@ A coordinate-based neural network that learns to generate images from scratch us
 
 
 ### 🌄 Boathouse Timelapse
-![Boathouse Timelapse](https://github.com/curtis-aln/neural-imaging-python/tree/main/media/demo/boathouse.git)
+![Boathouse Timelapse](https://github.com/curtis-aln/neural-imaging-python/tree/main/media/demo/boathouse.gif)
 
 ### 📺 For more examples
 [![Watch on YouTube](https://img.youtube.com/vi/D5AiTdJOa4Q/0.jpg)](https://youtu.be/D5AiTdJOa4Q?si=r1Pu6iq7I6H1o-u7)
