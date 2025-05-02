@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 import numpy as np
-from PIL import Image
 
 class PredictionSlideshow:
     def __init__(self, predictions_list, sizes_list, training_images):

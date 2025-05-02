@@ -1,7 +1,7 @@
 # Neural Networking
 import tensorflow as tf
 import numpy as np
-from network.siren_model import Sine, build_siren_model, ModelConfig
+from network.siren_model import build_siren_model
 
 # video recording & file saving
 import cv2
@@ -15,6 +15,7 @@ from colorama import Fore, Style
 # users window size
 import tkinter as tk
 
+from settings import *
 
 
 import sys
@@ -32,29 +33,6 @@ class SingleLineLogger(tf.keras.callbacks.Callback):
 
 print(Fore.CYAN + f'TensorFlow Version: {tf.__version__}' + Style.RESET_ALL)
 
-""" Settings """
-epochs_per_image = 1500
-video_frame_rate = 30
-
-height = 256 #256
-
-
- # creating the model we use for training
-config = ModelConfig(
-    input_dim=7,
-    hidden_layers=15,
-    hidden_units=180,
-    w0=1.0,
-    w0_initial=30.0,
-    final_activation='sigmoid'
-)
-
-training_image_folder = "training_images"
-weights_save_path = "outputs/network_data.weights.h5"
-video_save_path = "outputs/training_videos/"
-final_image_save_path = "outputs/final_images/"
-
-""" ~ ~ ~ ~ """
 
 class LossHistory(tf.keras.callbacks.Callback):
     def __init__(self):
@@ -111,7 +89,7 @@ def get_window_dims():
 class NeuralImageGenerator:
     def __init__(self, load_model = False):
         # loading the image with our desired shape and resolution
-        self.images, self.image_names = load_all_images_from_folder(training_image_folder, height)
+        self.images, self.image_names = load_all_images_from_folder(training_image_folder, image_longest_length)
         self.image_sizes = [(img.shape[1], img.shape[0]) for img in self.images]
 
         # creating the input data from the image sizes

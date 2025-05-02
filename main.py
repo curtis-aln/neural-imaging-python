@@ -3,12 +3,6 @@
 # Hyper-resolution video generation mode
 # program can train on videos
 
-# Inquireries
-# What happens if we feed it two images training data
-# seemless transitions
-
-# bee took about 5000 epochs
-
 from network.neural_image import *
 from matplotlib_rendering import PredictionSlideshow
 

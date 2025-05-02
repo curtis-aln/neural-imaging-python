@@ -1,0 +1,25 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.env/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Logs and output
+*.log
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Environment config
+.env
+*.env
+
+# the timelapse videos
+media/timelapse_videos/
