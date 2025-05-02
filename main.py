@@ -6,8 +6,8 @@
 from network.neural_image import *
 from matplotlib_rendering import PredictionSlideshow
 
-img_generator = NeuralImageGenerator(load_model=True)
-predictions, image_sizes, training_images = img_generator.train_model(save_model=True)
+img_generator = NeuralImageGenerator(load_model=load_model)
+predictions, image_sizes, training_images = img_generator.train_model()
 
 rendering = PredictionSlideshow(predictions, image_sizes, training_images)
 

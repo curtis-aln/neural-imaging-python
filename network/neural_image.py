@@ -4,7 +4,6 @@ import numpy as np
 from network.siren_model import build_siren_model
 
 # video recording & file saving
-import cv2
 import os
 
 from network.video_callback import VideoCallback
@@ -12,136 +11,95 @@ from network.video_callback import VideoCallback
 # nice printing colors
 from colorama import Fore, Style
 
-# users window size
-import tkinter as tk
-
 from settings import *
 
+from network.net_utils import *
 
-import sys
-class SingleLineLogger(tf.keras.callbacks.Callback):
-    def on_epoch_end(self, epoch, logs=None):
-        logs = logs or {}
-        msg = f"\rEpoch {epoch+1} | " + " | ".join([f"{k}: {v:.4f}" for k, v in logs.items()])
-        sys.stdout.write(msg)
-        sys.stdout.flush()
-
-    def on_train_end(self, logs=None):
-        print()  # move to new line after training
-
-
-
-print(Fore.CYAN + f'TensorFlow Version: {tf.__version__}' + Style.RESET_ALL)
-
-
-class LossHistory(tf.keras.callbacks.Callback):
-    def __init__(self):
-        super().__init__()
-        self.losses = []
-
-    def on_epoch_end(self, epoch, logs=None):
-        if logs is not None and 'loss' in logs:
-            self.losses.append(logs['loss'])
-
-
-def load_image_from_file(image_path: str, desired_shortest_side: int) -> np.ndarray:
-    img = cv2.imread(image_path)
-    if img is None:
-        raise ValueError(f"Image at {image_path} could not be read.")
+# we have both videos and images possible so we use this function to differentiate
+def get_media_shapes(data, training_images = True):
+    if training_images:
+        return [(img.shape[1], img.shape[0]) for img in data]
     
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-    h, w = img.shape[:2]
-    if h < w:
-        scale = desired_shortest_side / h
-    else:
-        scale = desired_shortest_side / w
-
-    new_size = (int(w * scale), int(h * scale))
-    return cv2.resize(img, new_size, interpolation=cv2.INTER_CUBIC)
-
-def load_all_images_from_folder(folder_path: str, desired_shortest_side: int) -> list:
-    supported_extensions = {'.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.webp'}
-    images = []
-    file_names = os.listdir(folder_path)
-
-    for filename in file_names:
-        if any(filename.lower().endswith(ext) for ext in supported_extensions):
-            image_path = os.path.join(folder_path, filename)
-            try:
-                img = load_image_from_file(image_path, desired_shortest_side)
-                images.append(img)
-            except Exception as e:
-                print(f"Skipping {filename}: {e}")
-
-    file_names_no_ext = [os.path.splitext(name)[0] for name in file_names] # removes the .png, .jpg etc
-    return images, file_names_no_ext
-
-
-def get_window_dims():
-    root = tk.Tk()
-    width = root.winfo_screenwidth()
-    height = root.winfo_screenheight()
-    root.destroy()
-    return width, height
-
+    return [(video.shape[2], video.shape[1]) for video in data]
 
 class NeuralImageGenerator:
     def __init__(self, load_model = False):
-        # loading the image with our desired shape and resolution
-        self.images, self.image_names = load_all_images_from_folder(training_image_folder, image_longest_length)
-        self.image_sizes = [(img.shape[1], img.shape[0]) for img in self.images]
+        # loading the images and the videos from memory
+        images, image_names = load_all_media_from_folder(image_dataset_path, image_longest_length, media_type='images')
+        videos, video_names = load_all_media_from_folder(video_dataset_path, image_longest_length, media_type='videos')
 
-        # creating the input data from the image sizes
-        self.images_inputs = [self.create_input_data(size) for size in self.image_sizes]
+        # determining whether the media type is video or image
+        self.is_training_images = len(images) != 0
 
-        # now we need to turn these images into data that the network can handle
-        normalized_images = [self.normalize_reshape_image(img, size) for img, size in zip(self.images, self.image_sizes)]
-        self.datasets = [self.create_dataset(inp, norm) for inp, norm in zip(self.images_inputs, normalized_images)]
+        img_len, vid_len = len(images), len(videos)
+        if (img_len != 0 and vid_len != 0):
+            print(Fore.MAGENTA + "There are both images and videos detected in the training folders, would you like videos (v) to be trained or images (i)? ")
+            self.is_training_images = input(Fore.MAGENTA + ">>> " + Style.RESET_ALL) == "i"
+        
+        self.training_media, self.training_names = (images, image_names) if self.is_training_images else (videos, video_names)
+        
+        # each media will have their own size and aspect ratio which needs to be fetched to create their own input space
+        self.media_sizes = get_media_shapes(self.training_media, self.is_training_images)
 
-        # loading the model
+        # creating the input data from the media sizes | automatically adjusts for videos
+        self.input_space = [create_input_data(size) for size in self.media_sizes]
+
+        # Flattening the data so that we can map it to the input space and feed into into the tensorflow trainer
+        self.normalized_images = [normalize_and_reshape_media(media) for media in self.training_media]
+
+        # creating the training datasets
+        self.datasets = [self.create_dataset(inp, norm) for inp, norm in zip(self.input_space, self.normalized_images)]
+
+        print("norm images shape", self.normalized_images[0].shape)
+        print("input space shape", self.input_space[0].shape)
+
+        # loading and compiling the model using SIREN
         self.model = build_siren_model(config)
         if load_model:
             self.load_model()
         self.model.summary()
+        
+        self.model.compile(optimizer=model_optimizer, loss=model_loss)
 
-        self.model.compile(optimizer='adam', loss='mse')
-
+        # at the end of training each model we store its best prediction of the training data here
         self.preditions = []
         
-        # for recording loss over time
-        self.loss_callback = LossHistory()
-        self.video_callback = VideoCallback(self, save_every=1, resolution=self.image_sizes[0])
-    
+        # Important callbacks during training
+        self.video_callback = VideoCallback(self, save_every=1, resolution=self.media_sizes[0])
+        cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=weights_save_path, 
+                                                         save_weights_only=True, verbose=1, mode='max', save_best_only=True)
+        self.callbacks = [LossHistory(), cp_callback, SingleLineLogger()]
 
-    def train_model(self, save_model = True, hyper_res=False) -> tuple:
-        # Create a callback that saves the model's weights
-        cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=weights_save_path, save_weights_only=True, verbose=1, mode='max', save_best_only=True)
-        callbacks = [self.loss_callback, cp_callback, self.video_callback, SingleLineLogger()]
+        if self.is_training_images:
+            self.callbacks.append(self.video_callback)
+
+
+    def train_model(self, hyper_res=False) -> tuple: # todo give these params a use        
         
-        # each model is trained one after the other
-        image_index = 0
-        for dataset, name, size in zip(self.datasets, self.image_names, self.image_sizes):
-            # setting the video maker
+        image_index = 0 # each model is trained one after the other
+        for dataset, name, size in zip(self.datasets, self.training_names, self.media_sizes):
             self.video_callback.reset(size, image_index)
 
-            exeption = self.fit_image(dataset, callbacks, name)
+            exeption = self.fit_image(dataset, self.callbacks, name)
+            prediction = self.get_prediction(image_index, hyper_res)[0]
             
-            print("==== Saving Video ==== ")
-            path = video_save_path + name + ".mp4"
-            print(Fore.BLUE + f"saving to path '{path}'" + Style.RESET_ALL)
+            if self.is_training_images:
+                print("==== Saving Video ==== ")
+                path = timelapse_save_path + name + ".mp4"
+                print(Fore.BLUE + f"saving to path '{path}'" + Style.RESET_ALL)
+                self.video_callback.save_video(fps=video_frame_rate, output_path=path)
 
-            self.video_callback.save_video(fps=video_frame_rate, output_path=path)
+            else:
+                convert_predictions_to_video(prediction, final_predictions_save_path, video_predictions_fps, size)
             
-
             print("==== Evaluating model ==== ")
-            self.preditions.append(self.get_prediction(image_index, hyper_res)[0])
+            self.preditions.append(prediction)
             
             if exeption:
                 break
             image_index += 1
         
-        return self.preditions, self.image_sizes, self.images
+        return self.preditions, self.media_sizes, self.training_media
 
 
     def fit_image(self, dataset, call_backs, name):
@@ -163,8 +121,8 @@ class NeuralImageGenerator:
         
    
     def get_prediction(self, index, hyper_res=False) -> tuple[np.ndarray, tuple]:
-        original_size = self.image_sizes[index]
-        inp_data = self.images_inputs[index]
+        original_size = self.media_sizes[index]
+        inp_data = self.input_space[index]
 
         if not hyper_res:
             return self.model.predict(inp_data), original_size
@@ -176,28 +134,6 @@ class NeuralImageGenerator:
     def get_losses(self):
         return self.loss_callback.losses
 
-    def create_input_data(self, size):        
-        # pre-creating the input space
-        sx, sy = size
-        x, y = np.meshgrid(np.linspace(0, 1, sx), np.linspace(0, 1, sy), indexing='xy')
-
-        # Cartesian Top-Left & Bottom-Right
-        input_space_TL = np.column_stack((x.ravel(), y.ravel()))
-        input_space_BR = np.column_stack(((1 - x).ravel(), (1 - y).ravel()))
-
-        # Polar (centered)
-        dx, dy = x - 0.5, y - 0.5
-        r = np.sqrt(dx**2 + dy**2)
-        theta = np.arctan2(dy, dx)
-        polar_space = np.column_stack((r.ravel(), np.sin(theta).ravel(), np.cos(theta).ravel()))
-
-        # [TL.x, TL.y, BR.x, BR.y, R, Sin, Cos]
-        return np.concatenate((input_space_TL, input_space_BR, polar_space), axis=1)
-
-    def normalize_reshape_image(self, image, size):
-        # the image needs to be normalized from 0-255 to 0-1 and have a 2d shape
-        normalized = image / 255
-        return normalized.reshape(size[0] * size[1], 3)
 
     def create_dataset(self, inp_data, normalised_img):
         dataset = tf.data.Dataset.from_tensor_slices((inp_data, normalised_img))
