@@ -9,4 +9,4 @@ shape = image.shape
 flattened = normalize_and_reshape_media(image, False)
 print(f"flattened shape: {flattened.shape}")
 
-save_flat_predictions_as_video(flattened, "media/final_images/proof.mp4", shape, video_frame_rate)
+save_flat_predictions_as_video(flattened, "media/final_images/proof.mp4", shape, timelapse_fps)

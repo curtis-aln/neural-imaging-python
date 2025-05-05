@@ -27,11 +27,12 @@ class NeuralImageGenerator:
         # loading the images and the videos from memory
         images, image_names = load_all_media_from_folder(image_dataset_path, image_longest_length, media_type='images')
         videos, video_names = load_all_media_from_folder(video_dataset_path, image_longest_length, media_type='videos', frame_count=frames_max)
+        print(Fore.GREEN + "Images and/or VIdeos Sucessfully loaded to memory" + Style.RESET_ALL)
 
         # determining whether the media type is video or image
         self.is_training_images = False #len(images) != 0
 
-        img_len, vid_len = len(images), len(videos)
+        img_len, vid_len = len(images), len(videos) # todo
         #if (img_len != 0 and vid_len != 0):
         #    print(Fore.MAGENTA + "There are both images and videos detected in the training folders, would you like videos (v) to be trained or images (i)? ")
          #   self.is_training_images = input(Fore.MAGENTA + ">>> " + Style.RESET_ALL) == "i"
@@ -40,13 +41,16 @@ class NeuralImageGenerator:
         
         # each media will have their own size and aspect ratio which needs to be fetched to create their own input space
         self.media_frame_sizes = get_media_shapes(self.training_media, self.is_training_images)
-
+        print(Fore.YELLOW + f"{len(self.training_media)} instances found for training" + Style.RESET_ALL)
 
         # Flattening the data so that we can map it to the input space and feed into into the tensorflow trainer
         self.normalized_media = [normalize_and_reshape_media(media, self.is_training_images) for media in self.training_media]
 
         # creating the input data from the media sizes | automatically adjusts for videos
-        self.input_space = [create_input_data(video.shape) for video in videos]
+        if self.is_training_images:
+            self.input_space = [create_input_data(size) for size in self.media_frame_sizes]
+        else:
+            self.input_space = [create_video_input_data(size, video.shape[0]) for size, video in zip(self.media_frame_sizes, self.training_media)]
 
         # creating the training datasets
         print("videos shape", videos[0].shape)
@@ -59,8 +63,10 @@ class NeuralImageGenerator:
         if load_model:
             self.load_model()
         self.model.summary()
+        print(Fore.GREEN + "model has been created")
         
         self.model.compile(optimizer=model_optimizer, loss=model_loss)
+        print(Fore.GREEN + f"model has been compiled with optimizer '{model_optimizer}' and loss '{model_loss}'")
 
         # at the end of training each model we store its best prediction of the training data here
         self.preditions = []
@@ -73,24 +79,26 @@ class NeuralImageGenerator:
 
         if self.is_training_images:
             self.callbacks.append(self.video_callback)
+        
+        print(Fore.GREEN + "Initialization Finished" + Style.RESET_ALL)
 
 
     def train_model(self, hyper_res=False) -> tuple: # todo give these params a use        
         
         image_index = 0 # each model is trained one after the other
         for dataset, name, size in zip(self.datasets, self.training_names, self.media_frame_sizes):
+            print(Fore.BLUE + f"Training model '{name}' with training image shape {size} ({image_index}/{len(self.training_media)})")
             self.video_callback.reset(size, image_index)
 
             exeption = self.fit_image(dataset, self.callbacks, name)
             prediction = self.get_prediction(image_index, hyper_res)[0]
             
             if self.is_training_images:
-                print("==== Saving Video ==== ")
                 path = timelapse_save_path + name + ".mp4"
-                print(Fore.BLUE + f"saving to path '{path}'" + Style.RESET_ALL)
-                self.video_callback.save_video(fps=video_frame_rate, output_path=path)
+                print(Fore.BLUE + f"saving timelapse to path '{path}'" + Style.RESET_ALL)
+                self.video_callback.save_video(fps=timelapse_fps, output_path=path)
 
-            else:
+            else: # training videos
                 path = final_predictions_save_path + name + ".mp4"
                 shape = self.training_media[image_index].shape
                 save_flat_predictions_as_video(prediction, path, shape, video_predictions_fps)

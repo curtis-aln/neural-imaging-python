@@ -8,14 +8,13 @@ final_predictions_save_path = "media/final_images/"
 weights_save_path = "outputs/network_data.weights.h5" # todo
 
 epochs_per_image = 2000
-video_frame_rate = 10
-frames_max = 40
+timelapse_fps = 10
 
 # the longest length of an image, for lanscape images its width will be this, height for portrait images
-image_longest_length = 40
-
-video_predictions_fps = 10
-video_batch_size = 60_000
+image_longest_length = 60
+frames_max = 60
+video_predictions_fps = 30
+video_batch_size = 6_000
 
 video_generation = False
 load_model = False
@@ -24,7 +23,7 @@ load_model = False
 config = ModelConfig(
     input_dim=8,
     hidden_layers=6,
-    hidden_units=100,
+    hidden_units=120,
     w0=1.0,
     w0_initial=30.0,
     final_activation='sigmoid'

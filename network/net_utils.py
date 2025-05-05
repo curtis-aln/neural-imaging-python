@@ -155,50 +155,41 @@ def get_window_dims():
     return width, height
 
 
-def create_input_data(size):
-    if len(size) == 4: # frame, x, y, col
-        num_frames, sx, sy, _ = size
-        time_vals = np.linspace(0, 1, num_frames)
+def create_input_data(image_size : tuple) -> np.ndarray:
+    size_x, size_y = image_size
+    
+    # cartesian coordinates
+    x, y = np.meshgrid(np.linspace(0, 1, size_x), np.linspace(0, 1, size_y), indexing='xy')
+    
+    input_space_TL = np.column_stack((x.ravel(), y.ravel()))
+    input_space_BR = np.column_stack(((1 - x).ravel(), (1 - y).ravel()))
+    
+    # polar coordinates
+    dx, dy = x - 0.5, y - 0.5
+    r = np.sqrt(dx**2 + dy**2)
+    theta = np.arctan2(dy, dx)
+    polar_space = np.column_stack((r.ravel(), np.sin(theta).ravel(), np.cos(theta).ravel()))
+    time_space = np.zeros((size_x * size_y, 1))
 
-        # Spatial grid
-        x, y = np.meshgrid(np.linspace(0, 1, sx), np.linspace(0, 1, sy), indexing='xy')
-        x_flat = x.ravel()
-        y_flat = y.ravel()
+    # adding them all together
+    return np.concatenate((input_space_TL, input_space_BR, polar_space, time_space), axis=1)
 
-        input_space_TL = np.column_stack((x_flat, y_flat))
-        input_space_BR = np.column_stack((1 - x_flat, 1 - y_flat))
-        dx, dy = x - 0.5, y - 0.5
-        r = np.sqrt(dx**2 + dy**2).ravel()
-        theta = np.arctan2(dy, dx)
-        polar_space = np.column_stack((r, np.sin(theta).ravel(), np.cos(theta).ravel()))
+def create_video_input_data(image_size: tuple, frames: int) -> np.ndarray:
+    """Creates input data for a video where each frame has time embedded in the input features."""
+    base_input = create_input_data(image_size)
+    num_pixels = image_size[0] * image_size[1]
+    
+    # Index of the time column (last column in base_input)
+    time_column_index = base_input.shape[1] - 1
+    
+    video_input = np.repeat(base_input[None, :, :], frames, axis=0)  # shape: (frames, num_pixels, features)
 
-        # Combine spatial data
-        spatial_features = np.concatenate((input_space_TL, input_space_BR, polar_space), axis=1)  # shape: (sx*sy, features)
+    # Add time encoding to each frame
+    for i in range(frames):
+        time_value = i / (frames - 1) if frames > 1 else 0.0
+        video_input[i, :, time_column_index] = time_value
 
-        # Repeat spatial features for each frame
-        spatial_repeated = np.repeat(spatial_features[np.newaxis, :, :], num_frames, axis=0)  # shape: (num_frames, sx*sy, features)
-
-        # Time features (one per frame, broadcasted to every pixel)
-        time_space = np.repeat(time_vals[:, np.newaxis], sx * sy, axis=1).reshape(num_frames, sx * sy, 1)
-
-        # Combine everything
-        final = np.concatenate((spatial_repeated, time_space), axis=2)  # shape: (num_frames, sx*sy, features + 1)
-
-        return final.reshape(-1, final.shape[-1])  # Flatten to (num_frames * sx * sy, total_features)
-
-
-    else:
-        sx, sy = size
-        x, y = np.meshgrid(np.linspace(0, 1, sx), np.linspace(0, 1, sy), indexing='xy')
-        input_space_TL = np.column_stack((x.ravel(), y.ravel()))
-        input_space_BR = np.column_stack(((1 - x).ravel(), (1 - y).ravel()))
-        dx, dy = x - 0.5, y - 0.5
-        r = np.sqrt(dx**2 + dy**2)
-        theta = np.arctan2(dy, dx)
-        polar_space = np.column_stack((r.ravel(), np.sin(theta).ravel(), np.cos(theta).ravel()))
-        time_space = np.zeros((sx * sy, 1))
-
-        return np.concatenate((input_space_TL, input_space_BR, polar_space, time_space), axis=1)
+    return video_input.reshape(-1, base_input.shape[1])  # Flatten to (frames * num_pixels, features)
 
 
 
