@@ -73,8 +73,8 @@ class NeuralImageGenerator:
         
         # Important callbacks during training
         self.video_callback = VideoCallback(self, save_every=1, resolution=self.media_frame_sizes[0])
-        cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=weights_save_path, 
-                                                         save_weights_only=True, verbose=1, mode='max', save_best_only=True)
+        cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=model_save_folder_path, 
+                                                         verbose=1, mode='max', save_best_only=True)
         self.callbacks = [LossHistory(), cp_callback, SingleLineLogger()]
 
         if self.is_training_images:
@@ -87,7 +87,9 @@ class NeuralImageGenerator:
         
         image_index = 0 # each model is trained one after the other
         for dataset, name, size in zip(self.datasets, self.training_names, self.media_frame_sizes):
-            print(Fore.BLUE + f"Training model '{name}' with training image shape {size} ({image_index}/{len(self.training_media)})")
+            text = f"Training model '{name}' with training image shape {size} ({image_index}/{len(self.training_media)})"
+            print(Fore.BLUE + text + Style.RESET_ALL)
+
             self.video_callback.reset(size, image_index)
 
             exeption = self.fit_image(dataset, self.callbacks, name)
@@ -102,6 +104,7 @@ class NeuralImageGenerator:
                 path = final_predictions_save_path + name + ".mp4"
                 shape = self.training_media[image_index].shape
                 save_flat_predictions_as_video(prediction, path, shape, video_predictions_fps)
+                self.save_model()
             
             print("==== Evaluating model ==== ")
             self.preditions.append(prediction)
@@ -113,6 +116,10 @@ class NeuralImageGenerator:
         quit()
         return self.preditions, self.media_frame_sizes, self.training_media
 
+
+    def save_model(self):
+        self.model.save(model_save_folder_path)
+        print(Fore.MAGENTA + f"model has been saved to folder path '{model_save_folder_path}'" + Style.RESET_ALL)
 
     def fit_image(self, dataset, call_backs, name):
         # training this image
@@ -156,12 +163,12 @@ class NeuralImageGenerator:
 
 
     def load_model(self):
-        if not os.path.exists(weights_save_path):
+        if not os.path.exists(model_save_folder_path):
             print(Fore.RED + "No previous save file exists, creating new model" + Style.RESET_ALL)
             return
         
-        print(Fore.BLUE + f"A model has been retrived from '{weights_save_path}'")
+        print(Fore.BLUE + f"A model has been retrived from '{model_save_folder_path}'")
         if input(Fore.BLUE + "would you like to continue training with this model? y/n " + Style.RESET_ALL) == 'y':            
-            self.model.load_weights(weights_save_path)
+            self.model.load_weights(model_save_folder_path)
       
     

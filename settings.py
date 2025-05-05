@@ -5,16 +5,16 @@ video_dataset_path = "media/video_dataset/"
 timelapse_save_path = "media/timelapse_videos/"
 final_predictions_save_path = "media/final_images/"
 
-weights_save_path = "outputs/network_data.weights.h5" # todo
+model_save_folder_path = "model_saves/model.keras" # todo name should change for each different training session
 
 epochs_per_image = 2000
 timelapse_fps = 10
 
 # the longest length of an image, for lanscape images its width will be this, height for portrait images
-image_longest_length = 60
-frames_max = 60
-video_predictions_fps = 30
-video_batch_size = 6_000
+image_longest_length = 90
+frames_max = 40
+video_predictions_fps = 8
+video_batch_size = 10_000
 
 video_generation = False
 load_model = False

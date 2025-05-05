@@ -1,5 +1,8 @@
 # TODO:
+# Video weights saving with cusotom name
 # Ability to continue adding to the same video
+# Two save files - original resolution and hyper resolution (with boosted fps)
+
 # Hyper-resolution video generation mode
 # program can train on videos
 

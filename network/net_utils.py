@@ -231,4 +231,4 @@ def save_flat_predictions_as_video(flat_predictions, output_path, original_shape
         out.write(frame)
     out.release()
 
-    print("VIDEO HAS BEEN SAVED") 
+    print(Fore.MAGENTA + f"video saved to {output_path}" + Style.RESET_ALL) 
