@@ -62,12 +62,14 @@ def load_image_from_file(image_path: str, desired_shortest_side: int) -> np.ndar
     return cv2.resize(img, new_size, interpolation=cv2.INTER_CUBIC)
 
 # Function to load a single video
-def load_video_from_file(video_path: str, desired_shortest_side: int) -> np.ndarray:
+def load_video_from_file(video_path: str, desired_shortest_side: int, frame_count) -> np.ndarray:
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise ValueError(f"Video at {video_path} could not be read.")
     
     frames = []
+    new_size = (0, 0)
+
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -86,7 +88,8 @@ def load_video_from_file(video_path: str, desired_shortest_side: int) -> np.ndar
         frames.append(resized_frame)
     
     cap.release()
-    return np.array(frames)  # Return a numpy array of frames
+    reduced = reduce_video_to_frame_count(np.array(frames), frame_count)
+    return reduced, new_size  # Return a numpy array of frames
 
 
 def reduce_video_to_frame_count(video_array: np.ndarray, frame_count: int) -> np.ndarray:
@@ -133,9 +136,8 @@ def load_all_media_from_folder(folder_path: str, desired_shortest_side: int, med
         
         elif media_type == 'videos' and file_extension in supported_video_extensions:
             try:
-                video_frames = load_video_from_file(media_path, desired_shortest_side)
-                reduced = reduce_video_to_frame_count(video_frames, frame_count)
-                media_files.append(reduced)
+                video_frames, _ = load_video_from_file(media_path, desired_shortest_side, frame_count)
+                media_files.append(video_frames)
 
             except Exception as e:
                 print(f"Skipping {filename}: {e}")
@@ -154,35 +156,35 @@ def get_window_dims():
 
 
 def create_input_data(size):
-    """
-    Creates input data for images or videos. The input data includes spatial
-    coordinates (Cartesian and polar) and an additional time value for videos.
-    The time value is set to 0 for images.
-
-    :param size: Tuple of size (sx, sy) for images or (num_frames, sx, sy) for videos
-    :return: Concatenated array of spatial and time-related data
-    """
     if len(size) == 4: # frame, x, y, col
-        num_frames, sx, sy, col = size
+        num_frames, sx, sy, _ = size
         time_vals = np.linspace(0, 1, num_frames)
 
         # Spatial grid
         x, y = np.meshgrid(np.linspace(0, 1, sx), np.linspace(0, 1, sy), indexing='xy')
-        input_space_TL = np.column_stack((x.ravel(), y.ravel()))
-        input_space_BR = np.column_stack(((1 - x).ravel(), (1 - y).ravel()))
+        x_flat = x.ravel()
+        y_flat = y.ravel()
+
+        input_space_TL = np.column_stack((x_flat, y_flat))
+        input_space_BR = np.column_stack((1 - x_flat, 1 - y_flat))
         dx, dy = x - 0.5, y - 0.5
-        r = np.sqrt(dx**2 + dy**2)
+        r = np.sqrt(dx**2 + dy**2).ravel()
         theta = np.arctan2(dy, dx)
-        polar_space = np.column_stack((r.ravel(), np.sin(theta).ravel(), np.cos(theta).ravel()))
+        polar_space = np.column_stack((r, np.sin(theta).ravel(), np.cos(theta).ravel()))
 
-        # Repeat spatial info for each frame
-        spatial = np.concatenate((input_space_TL, input_space_BR, polar_space), axis=1)
-        spatial_repeated = np.tile(spatial, (num_frames, 1))
+        # Combine spatial data
+        spatial_features = np.concatenate((input_space_TL, input_space_BR, polar_space), axis=1)  # shape: (sx*sy, features)
 
-        # Time values for each frame
-        time_space = np.repeat(time_vals, sx * sy).reshape(-1, 1)
+        # Repeat spatial features for each frame
+        spatial_repeated = np.repeat(spatial_features[np.newaxis, :, :], num_frames, axis=0)  # shape: (num_frames, sx*sy, features)
 
-        return np.concatenate((spatial_repeated, time_space), axis=1)
+        # Time features (one per frame, broadcasted to every pixel)
+        time_space = np.repeat(time_vals[:, np.newaxis], sx * sy, axis=1).reshape(num_frames, sx * sy, 1)
+
+        # Combine everything
+        final = np.concatenate((spatial_repeated, time_space), axis=2)  # shape: (num_frames, sx*sy, features + 1)
+
+        return final.reshape(-1, final.shape[-1])  # Flatten to (num_frames * sx * sy, total_features)
 
 
     else:
@@ -219,36 +221,23 @@ def normalize_and_reshape_media(media, is_image):
     flattened = normalized.reshape(shape[0] * shape[1] * shape[2], shape[3])
     return flattened
 
+def reshape_normalized_back_to_media(flat_data, original_shape):
+    frames, height, width, _ = original_shape
+    reshaped = flat_data.reshape(frames, height, width, 3)
+    return (reshaped * 255).astype(np.uint8)
 
-def convert_predictions_to_video(predictions, output_path, num_frames, resolution, frame_rate=30):
-    """
-    Converts flattened network predictions into an MP4 video.
-
-    :param predictions: Flattened array of shape (num_frames * height * width, 3).
-    :param output_path: Path to save the output video (e.g. 'output.mp4').
-    :param num_frames: Number of frames in the video.
-    :param resolution: (height, width) of each frame.
-    :param frame_rate: FPS of the output video.
-    """
-    height, width = resolution
-    pixels_per_frame = height * width
-
-    # Check for consistent size
-    expected_total_pixels = num_frames * pixels_per_frame
-    if predictions.shape[0] != expected_total_pixels:
-        raise ValueError(f"Prediction size mismatch: expected {expected_total_pixels} pixels, got {predictions.shape[0]}")
-
-    # Reshape predictions to (num_frames, height, width, 3)
-    reshaped = predictions.reshape((num_frames, height, width, 3))
-
-    # Initialize VideoWriter
+def save_flat_predictions_as_video(flat_predictions, output_path, original_shape, frame_rate=30):
+    # Reconstruct original video tensor
+    reconstructed = reshape_normalized_back_to_media(flat_predictions, original_shape)
+    
+    num_frames, height, width, _ = reconstructed.shape
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(output_path, fourcc, frame_rate, (width, height))
 
-    for frame in reshaped:
-        # Convert from RGB to BGR for OpenCV
-        frame_bgr = cv2.cvtColor(np.clip(frame, 0, 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
-        out.write(frame_bgr)
-
+    print(reconstructed.shape)
+    for i in range(num_frames):
+        frame = reconstructed[i]
+        out.write(frame)
     out.release()
-    print(f"Video saved to {output_path}")
+
+    print("VIDEO HAS BEEN SAVED") 

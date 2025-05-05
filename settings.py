@@ -7,14 +7,15 @@ final_predictions_save_path = "media/final_images/"
 
 weights_save_path = "outputs/network_data.weights.h5" # todo
 
-epochs_per_image = 1000
+epochs_per_image = 2000
 video_frame_rate = 10
-frames_max = 60
+frames_max = 40
 
 # the longest length of an image, for lanscape images its width will be this, height for portrait images
-image_longest_length = 32
+image_longest_length = 40
 
 video_predictions_fps = 10
+video_batch_size = 60_000
 
 video_generation = False
 load_model = False
@@ -31,3 +32,4 @@ config = ModelConfig(
 
 model_optimizer = 'adam'
 model_loss = 'mse'
+

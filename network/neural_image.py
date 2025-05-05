@@ -29,12 +29,12 @@ class NeuralImageGenerator:
         videos, video_names = load_all_media_from_folder(video_dataset_path, image_longest_length, media_type='videos', frame_count=frames_max)
 
         # determining whether the media type is video or image
-        self.is_training_images = len(images) != 0
+        self.is_training_images = False #len(images) != 0
 
         img_len, vid_len = len(images), len(videos)
-        if (img_len != 0 and vid_len != 0):
-            print(Fore.MAGENTA + "There are both images and videos detected in the training folders, would you like videos (v) to be trained or images (i)? ")
-            self.is_training_images = input(Fore.MAGENTA + ">>> " + Style.RESET_ALL) == "i"
+        #if (img_len != 0 and vid_len != 0):
+        #    print(Fore.MAGENTA + "There are both images and videos detected in the training folders, would you like videos (v) to be trained or images (i)? ")
+         #   self.is_training_images = input(Fore.MAGENTA + ">>> " + Style.RESET_ALL) == "i"
         
         self.training_media, self.training_names = (images, image_names) if self.is_training_images else (videos, video_names)
         
@@ -92,7 +92,8 @@ class NeuralImageGenerator:
 
             else:
                 path = final_predictions_save_path + name + ".mp4"
-                convert_predictions_to_video(prediction, path, frames_max, size, video_predictions_fps)
+                shape = self.training_media[image_index].shape
+                save_flat_predictions_as_video(prediction, path, shape, video_predictions_fps)
             
             print("==== Evaluating model ==== ")
             self.preditions.append(prediction)
@@ -101,6 +102,7 @@ class NeuralImageGenerator:
                 break
             image_index += 1
         
+        quit()
         return self.preditions, self.media_frame_sizes, self.training_media
 
 
@@ -139,7 +141,9 @@ class NeuralImageGenerator:
 
     def create_dataset(self, inp_data, normalised_img):
         dataset = tf.data.Dataset.from_tensor_slices((inp_data, normalised_img))
-        dataset = dataset.batch(inp_data.shape[0])
+
+        batch_size = inp_data.shape[0] if self.is_training_images else video_batch_size
+        dataset = dataset.batch(batch_size)
         return dataset
 
 
