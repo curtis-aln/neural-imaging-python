@@ -22,8 +22,8 @@ load_model = False
  # creating the model we use for training
 config = ModelConfig(
     input_dim=8,
-    hidden_layers=6,
-    hidden_units=120,
+    hidden_layers=10,
+    hidden_units=100,
     w0=1.0,
     w0_initial=30.0,
     final_activation='sigmoid'

@@ -21,5 +21,10 @@ Thumbs.db
 .env
 *.env
 
-# the timelapse videos
+# the saved videos
 media/timelapse_videos/
+media/final_images/
+
+TODO.md
+test.py
+
