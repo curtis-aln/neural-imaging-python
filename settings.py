@@ -11,9 +11,9 @@ epochs_per_image = 2000
 timelapse_fps = 10
 
 # the longest length of an image, for lanscape images its width will be this, height for portrait images
-image_longest_length = 90
+image_longest_length = 60
 frames_max = 40
-video_predictions_fps = 8
+video_predictions_fps = 10
 video_batch_size = 10_000
 
 video_generation = False

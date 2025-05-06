@@ -220,6 +220,7 @@ def reshape_normalized_back_to_media(flat_data, original_shape):
 def save_flat_predictions_as_video(flat_predictions, output_path, original_shape, frame_rate=30):
     # Reconstruct original video tensor
     reconstructed = reshape_normalized_back_to_media(flat_predictions, original_shape)
+    print("Video data reshaped")
     
     num_frames, height, width, _ = reconstructed.shape
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')

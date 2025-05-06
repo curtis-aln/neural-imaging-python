@@ -2,14 +2,22 @@
 import tensorflow as tf
 import numpy as np
 
+@tf.keras.utils.register_keras_serializable()
 class Sine(tf.keras.layers.Layer):
-    def __init__(self, w0=1.0):
-        super().__init__()
+    def __init__(self, w0=1.0, **kwargs):
+        super().__init__(**kwargs)
         self.w0 = w0
 
     def call(self, inputs):
         return tf.sin(self.w0 * inputs)
 
+    def get_config(self):
+        config = super().get_config()
+        config.update({"w0": self.w0})
+        return config
+
+
+@tf.keras.utils.register_keras_serializable()
 class SIRENInitializer(tf.keras.initializers.Initializer):
     def __init__(self, w0=1.0):
         self.w0 = w0
@@ -18,6 +26,9 @@ class SIRENInitializer(tf.keras.initializers.Initializer):
         input_dim = shape[0]
         limit = np.sqrt(6 / input_dim) / self.w0
         return tf.random.uniform(shape, minval=-limit, maxval=limit, dtype=dtype)
+
+    def get_config(self):
+        return {"w0": self.w0}
 
 class ModelConfig:
     def __init__(
