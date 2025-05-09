@@ -23,7 +23,8 @@ def get_media_shapes(data, training_images = True):
     return [(video.shape[2], video.shape[1]) for video in data]
 
 class NeuralImageGenerator:
-    def __init__(self, load_model = False):
+    def __init__(self):
+        self.specific_path = ''
         if specific_media_to_train != "":
             media, name, self.is_training_images = self.load_specific_media()
             print(Fore.YELLOW + f"Sucesfully loaded the specified '{specific_media_to_train}' media")
@@ -51,27 +52,42 @@ class NeuralImageGenerator:
 
         # loading and compiling the model using SIREN
         self.model = build_siren_model(config)
-        if load_model:
-            self.load_model()
+        print(Fore.GREEN + "model has been created" + Style.RESET_ALL)
+        self.continue_training_model()            
         self.model.summary()
-        print(Fore.GREEN + "model has been created")
+        
         
         self.model.compile(optimizer=model_optimizer, loss=model_loss)
-        print(Fore.GREEN + f"model has been compiled with optimizer '{model_optimizer}' and loss '{model_loss}'")
+        print(Fore.GREEN + f"model has been compiled with optimizer '{model_optimizer}' and loss '{model_loss}'" + Style.RESET_ALL)
 
         # at the end of training each model we store its best prediction of the training data here
         self.preditions = []
         
         # Important callbacks during training
         self.video_callback = VideoCallback(self, save_every=1, resolution=self.media_frame_sizes[0])
-        cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=model_save_folder_path, 
-                                                         verbose=1, mode='max', save_best_only=True)
-        self.callbacks = [LossHistory(), cp_callback, SingleLineLogger()]
 
-        if self.is_training_images:
-            self.callbacks.append(self.video_callback)
         
         print(Fore.GREEN + "Initialization Finished" + Style.RESET_ALL)
+
+        
+    def continue_training_model(self):
+        if specific_media_to_train == '':
+            return False
+
+        # in the situation where there is already a model save file
+        name = self.training_names[0]
+        media_type = "image" if self.is_training_images else "video"
+        path = model_save_folder_path + name + "_" + media_type + ".keras"
+        file_exists = os.path.isfile(path)
+
+        if not file_exists:
+            return False
+        
+        print(Fore.BLUE + f"A model has been retrived from '{path}'")
+        if input(Fore.BLUE + "would you like to continue training with this model? y/n " + Style.RESET_ALL) == 'y':            
+            self.model.load_weights(path)
+        return True
+        
     
 
     def load_specific_media(self):
@@ -88,11 +104,11 @@ class NeuralImageGenerator:
         media = None
         size = None
         if is_training_images:
-            path = image_dataset_path + specific_media_to_train
-            media, size = load_image_from_file(path, image_longest_length)
+            self.specific_path = image_dataset_path + specific_media_to_train
+            media, size = load_image_from_file(self.specific_path, image_longest_length)
         else:
-            path = video_dataset_path + specific_media_to_train
-            media, size = load_all_media_from_folder(path, image_longest_length, frames_max)
+            self.specific_path = video_dataset_path + specific_media_to_train
+            media, size = load_all_media_from_folder(self.specific_path, image_longest_length, frames_max)
         
         return media, name, is_training_images
 
@@ -121,18 +137,28 @@ class NeuralImageGenerator:
         for dataset, name, size in zip(self.datasets, self.training_names, self.media_frame_sizes):
             text = f"Training model '{name}' with training image shape {size} ({image_index}/{len(self.training_media)})"
             print(Fore.BLUE + text + Style.RESET_ALL)
+
+            model_save_path = self.generate_model_save_path(name)
+            results_save_path = self.generate_results_save_path(name)
+
+            cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=model_save_path, 
+                                                         verbose=1, mode='max', save_best_only=True)
+            callbacks = [LossHistory(), SingleLineLogger(), cp_callback]
+
+            if self.is_training_images:
+                callbacks.append(self.video_callback)
             
             # this is needed for when media is being trained, we dont want the timelapse video to continue getting longer
             self.video_callback.reset(size, image_index)
 
             # exeption tells us the user wants to stop training | fitting the current dataset
-            exeption = self.fit_image(dataset, self.callbacks, name)
+            exeption = self.fit_image(dataset, callbacks, name)
 
             # now we tell the model to create its best prediction of what its supposed to draw
             prediction, _ = self.get_prediction(image_index, hyper_resolution_during_training)
             
             # now we need to save the prediction and prepare for the next media
-            self.process_trained_model(image_index, name, prediction)
+            self.process_trained_model(image_index, prediction, model_save_path, results_save_path)
             
             if exeption:
                 break
@@ -143,30 +169,35 @@ class NeuralImageGenerator:
         return self.preditions, self.media_frame_sizes, self.training_media
     
     
-    def process_trained_model(self, image_index : int, media_name : str, prediction):
+    def process_trained_model(self, image_index : int, prediction, model_save_path, results_save_path):
         # if images are being trained then we save the timelapse of it being generated
         if self.is_training_images:
-            results_path = timelapse_save_path + media_name + ".mp4"
-            print(Fore.BLUE + f"saving timelapse to path '{results_path}'" + Style.RESET_ALL)
-            self.video_callback.save_video(fps=timelapse_fps, output_path=results_path)
+            print(Fore.BLUE + f"saving timelapse to path '{results_save_path}'" + Style.RESET_ALL)
+            self.video_callback.save_video(fps=timelapse_fps, output_path=results_save_path)
 
         # if its a video being trained we save just the video
         else:
-            results_path = final_predictions_save_path + media_name + ".mp4"
             shape = self.training_media[image_index].shape
-            save_flat_predictions_as_video(prediction, results_path, shape, video_predictions_fps)
+            save_flat_predictions_as_video(prediction, results_save_path, shape, video_predictions_fps)
         
-        self.save_model(media_name)
+        self.save_model(model_save_path)
         self.preditions.append(prediction) # for rendering later
 
-
-
-    def save_model(self, name=''):
+    
+    def generate_model_save_path(self, name=''):
         media_type = "image" if self.is_training_images else "video"
         extension = "keras"
         name = "model" if name == '' else name
-        path = model_save_folder_path + name + "_" + media_type + "." + extension
-        
+        path = model_save_folder_path + name + "_" + media_type + "." + extension 
+        return path
+    
+    def generate_results_save_path(self, name=''):
+        folder = timelapse_save_path if self.is_training_images else final_predictions_save_path
+        path = folder + name + ".mp4"
+        return path
+
+
+    def save_model(self, path):
         self.model.save(path)
         print(Fore.MAGENTA + f"model has been saved to folder path '{path}'" + Style.RESET_ALL)
 
@@ -210,14 +241,3 @@ class NeuralImageGenerator:
         dataset = dataset.batch(batch_size)
         return dataset
 
-
-    def load_model(self):
-        if not os.path.exists(model_save_folder_path):
-            print(Fore.RED + "No previous save file exists, creating new model" + Style.RESET_ALL)
-            return
-        
-        print(Fore.BLUE + f"A model has been retrived from '{model_save_folder_path}'")
-        if input(Fore.BLUE + "would you like to continue training with this model? y/n " + Style.RESET_ALL) == 'y':            
-            self.model.load_weights(model_save_folder_path)
-      
-    

@@ -5,7 +5,7 @@ video_dataset_path = "media/video_dataset/"
 timelapse_save_path = "media/timelapse_videos/"
 final_predictions_save_path = "media/final_images/"
 
-model_save_folder_path = "model_saves/model.keras" # todo name should change for each different training session
+model_save_folder_path = "model_saves/" # todo name should change for each different training session
 
 # if you only want to train one image / video then specify its name here | make sure its extension (.png / .mp4) is included
 specific_media_to_train = "boathouse.png"
@@ -23,9 +23,6 @@ image_longest_length = 100
 frames_max = 40
 video_predictions_fps = 10
 video_batch_size = 20_000 # image batch size is by defualt the maximum #todo
-
-video_generation = False
-load_model = False
 
  # creating the model we use for training
 config = ModelConfig(
