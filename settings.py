@@ -7,6 +7,9 @@ final_predictions_save_path = "media/final_images/"
 
 model_save_folder_path = "model_saves/model.keras" # todo name should change for each different training session
 
+# if you only want to train one image / video then specify its name here | make sure its extension (.png / .mp4) is included
+specific_media_to_train = "boathouse.png"
+
 # how many training generations each image will recive before moving onto the next #todo improve
 epochs_per_image = 200
 

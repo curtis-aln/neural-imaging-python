@@ -45,7 +45,7 @@ import cv2
 import numpy as np
 
 # Function to load a single image
-def load_image_from_file(image_path: str, desired_shortest_side: int) -> np.ndarray:
+def load_image_from_file(image_path: str, desired_shortest_side: int) -> tuple[np.ndarray, tuple]:
     img = cv2.imread(image_path)
     if img is None:
         raise ValueError(f"Image at {image_path} could not be read.")
@@ -59,10 +59,10 @@ def load_image_from_file(image_path: str, desired_shortest_side: int) -> np.ndar
         scale = desired_shortest_side / w
 
     new_size = (int(w * scale), int(h * scale))
-    return cv2.resize(img, new_size, interpolation=cv2.INTER_CUBIC)
+    return cv2.resize(img, new_size, interpolation=cv2.INTER_CUBIC), new_size
 
 # Function to load a single video
-def load_video_from_file(video_path: str, desired_shortest_side: int, frame_count) -> np.ndarray:
+def load_video_from_file(video_path: str, desired_shortest_side: int, frame_count) -> tuple[np.ndarray, tuple]:
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise ValueError(f"Video at {video_path} could not be read.")
@@ -129,7 +129,7 @@ def load_all_media_from_folder(folder_path: str, desired_shortest_side: int, med
         
         if media_type == 'images' and file_extension in supported_image_extensions:
             try:
-                img = load_image_from_file(media_path, desired_shortest_side)
+                img, _ = load_image_from_file(media_path, desired_shortest_side)
                 media_files.append(img)
             except Exception as e:
                 print(f"Skipping {filename}: {e}")

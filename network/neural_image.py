@@ -24,20 +24,14 @@ def get_media_shapes(data, training_images = True):
 
 class NeuralImageGenerator:
     def __init__(self, load_model = False):
-        # loading the images and the videos from memory
-        images, image_names = load_all_media_from_folder(image_dataset_path, image_longest_length, media_type='images')
-        videos, video_names = load_all_media_from_folder(video_dataset_path, image_longest_length, media_type='videos', frame_count=frames_max)
-        print(Fore.GREEN + "Images and/or VIdeos Sucessfully loaded to memory" + Style.RESET_ALL)
-
-        # determining whether the media type is video or image
-        self.is_training_images = False #len(images) != 0
-
-        img_len, vid_len = len(images), len(videos) # todo
-        if (img_len != 0 and vid_len != 0):
-            print(Fore.MAGENTA + "There are both images and videos detected in the training folders, would you like videos (v) to be trained or images (i)? ")
-            self.is_training_images = input(Fore.MAGENTA + ">>> " + Style.RESET_ALL) == "i"
+        if specific_media_to_train != "":
+            media, name, self.is_training_images = self.load_specific_media()
+            print(Fore.YELLOW + f"Sucesfully loaded the specified '{specific_media_to_train}' media")
+            self.training_media = [media]
+            self.training_names = [name]
         
-        self.training_media, self.training_names = (images, image_names) if self.is_training_images else (videos, video_names)
+        else:
+            self.training_media, self.training_names, self.is_training_images = self.load_media_info_from_folder()
         
         # each media will have their own size and aspect ratio which needs to be fetched to create their own input space
         self.media_frame_sizes = get_media_shapes(self.training_media, self.is_training_images)
@@ -53,9 +47,6 @@ class NeuralImageGenerator:
             self.input_space = [create_video_input_data(size, video.shape[0]) for size, video in zip(self.media_frame_sizes, self.training_media)]
 
         # creating the training datasets
-        print("videos shape", videos[0].shape)
-        print("inp space shape", self.input_space[0].shape)
-        print("normalized media shape", self.normalized_media[0].shape)
         self.datasets = [self.create_dataset(inp, norm) for inp, norm in zip(self.input_space, self.normalized_media)]
 
         # loading and compiling the model using SIREN
@@ -81,6 +72,47 @@ class NeuralImageGenerator:
             self.callbacks.append(self.video_callback)
         
         print(Fore.GREEN + "Initialization Finished" + Style.RESET_ALL)
+    
+
+    def load_specific_media(self):
+        name, extension = os.path.splitext(specific_media_to_train)
+        extension = extension.lstrip('.')
+
+        images = ["png", "jpeg"]
+        videos = ["mp4", "wav"]
+        is_training_images = extension in images
+
+        if not (extension in images + videos):
+            raise ValueError(f"Unsupported Filetype: {extension} ({specific_media_to_train})")
+        
+        media = None
+        size = None
+        if is_training_images:
+            path = image_dataset_path + specific_media_to_train
+            media, size = load_image_from_file(path, image_longest_length)
+        else:
+            path = video_dataset_path + specific_media_to_train
+            media, size = load_all_media_from_folder(path, image_longest_length, frames_max)
+        
+        return media, name, is_training_images
+
+
+    def load_media_info_from_folder(self):
+        # loading the images and the videos from memory
+        images, image_names = load_all_media_from_folder(image_dataset_path, image_longest_length, media_type='images')
+        videos, video_names = load_all_media_from_folder(video_dataset_path, image_longest_length, media_type='videos', frame_count=frames_max)
+        print(Fore.GREEN + "Images and/or VIdeos Sucessfully loaded to memory" + Style.RESET_ALL)
+
+        # determining whether the media type is video or image
+        is_training_images = False #len(images) != 0
+
+        img_len, vid_len = len(images), len(videos) # todo
+        if (img_len != 0 and vid_len != 0):
+            print(Fore.MAGENTA + "There are both images and videos detected in the training folders, would you like videos (v) to be trained or images (i)? ")
+            is_training_images = input(Fore.MAGENTA + ">>> " + Style.RESET_ALL) == "i"
+        
+        training_media, training_names = (images, image_names) if self.is_training_images else (videos, video_names)
+        return training_media, training_names, is_training_images
 
 
     def train_model(self, hyper_resolution_during_training=False) -> tuple:   
