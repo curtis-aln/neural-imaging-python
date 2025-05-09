@@ -25,6 +25,9 @@ Thumbs.db
 media/timelapse_videos/
 media/final_images/
 
+# model save files
+model_saves/
+
 TODO.md
 test.py
 

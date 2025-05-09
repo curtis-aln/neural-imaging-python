@@ -33,9 +33,9 @@ class NeuralImageGenerator:
         self.is_training_images = False #len(images) != 0
 
         img_len, vid_len = len(images), len(videos) # todo
-        #if (img_len != 0 and vid_len != 0):
-        #    print(Fore.MAGENTA + "There are both images and videos detected in the training folders, would you like videos (v) to be trained or images (i)? ")
-         #   self.is_training_images = input(Fore.MAGENTA + ">>> " + Style.RESET_ALL) == "i"
+        if (img_len != 0 and vid_len != 0):
+            print(Fore.MAGENTA + "There are both images and videos detected in the training folders, would you like videos (v) to be trained or images (i)? ")
+            self.is_training_images = input(Fore.MAGENTA + ">>> " + Style.RESET_ALL) == "i"
         
         self.training_media, self.training_names = (images, image_names) if self.is_training_images else (videos, video_names)
         
@@ -83,43 +83,60 @@ class NeuralImageGenerator:
         print(Fore.GREEN + "Initialization Finished" + Style.RESET_ALL)
 
 
-    def train_model(self, hyper_res=False) -> tuple: # todo give these params a use        
+    def train_model(self, hyper_resolution_during_training=False) -> tuple:   
         
         image_index = 0 # each model is trained one after the other
         for dataset, name, size in zip(self.datasets, self.training_names, self.media_frame_sizes):
             text = f"Training model '{name}' with training image shape {size} ({image_index}/{len(self.training_media)})"
             print(Fore.BLUE + text + Style.RESET_ALL)
-
+            
+            # this is needed for when media is being trained, we dont want the timelapse video to continue getting longer
             self.video_callback.reset(size, image_index)
 
+            # exeption tells us the user wants to stop training | fitting the current dataset
             exeption = self.fit_image(dataset, self.callbacks, name)
-            prediction = self.get_prediction(image_index, hyper_res)[0]
-            
-            if self.is_training_images:
-                path = timelapse_save_path + name + ".mp4"
-                print(Fore.BLUE + f"saving timelapse to path '{path}'" + Style.RESET_ALL)
-                self.video_callback.save_video(fps=timelapse_fps, output_path=path)
 
-            else: # training videos
-                path = final_predictions_save_path + name + ".mp4"
-                shape = self.training_media[image_index].shape
-                save_flat_predictions_as_video(prediction, path, shape, video_predictions_fps)
-                self.save_model()
+            # now we tell the model to create its best prediction of what its supposed to draw
+            prediction, _ = self.get_prediction(image_index, hyper_resolution_during_training)
             
-            print("==== Evaluating model ==== ")
-            self.preditions.append(prediction)
+            # now we need to save the prediction and prepare for the next media
+            self.process_trained_model(image_index, name, prediction)
             
             if exeption:
                 break
+
             image_index += 1
         
         quit()
         return self.preditions, self.media_frame_sizes, self.training_media
+    
+    
+    def process_trained_model(self, image_index : int, media_name : str, prediction):
+        # if images are being trained then we save the timelapse of it being generated
+        if self.is_training_images:
+            results_path = timelapse_save_path + media_name + ".mp4"
+            print(Fore.BLUE + f"saving timelapse to path '{results_path}'" + Style.RESET_ALL)
+            self.video_callback.save_video(fps=timelapse_fps, output_path=results_path)
+
+        # if its a video being trained we save just the video
+        else:
+            results_path = final_predictions_save_path + media_name + ".mp4"
+            shape = self.training_media[image_index].shape
+            save_flat_predictions_as_video(prediction, results_path, shape, video_predictions_fps)
+        
+        self.save_model(media_name)
+        self.preditions.append(prediction) # for rendering later
 
 
-    def save_model(self):
-        self.model.save(model_save_folder_path)
-        print(Fore.MAGENTA + f"model has been saved to folder path '{model_save_folder_path}'" + Style.RESET_ALL)
+
+    def save_model(self, name=''):
+        media_type = "image" if self.is_training_images else "video"
+        extension = "keras"
+        name = "model" if name == '' else name
+        path = model_save_folder_path + name + "_" + media_type + "." + extension
+        
+        self.model.save(path)
+        print(Fore.MAGENTA + f"model has been saved to folder path '{path}'" + Style.RESET_ALL)
 
     def fit_image(self, dataset, call_backs, name):
         # training this image
