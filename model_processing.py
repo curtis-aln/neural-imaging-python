@@ -7,12 +7,12 @@ from network.net_utils import *
 from settings import *
 
 # ========== SETTINGS ==========
-model_name = 'model'
+model_name = 'yingyang_video'
 training_video_name = "yingyang"
 
-shortest_side_length = 500
-frames_per_second = 30
-video_length_seconds = 5
+shortest_side_length = 380
+frames_per_second = 15
+video_length_seconds = 4
 
 batch_size = 8192
 use_mixed_precision = True
@@ -57,7 +57,7 @@ def main():
     print(f"[INFO] Total pixels overall: {size[0] * size[1] * frames}")
 
     # === Prepare input data ===
-    input_data = create_video_input_data(size, frames)
+    input_data = create_video_input_data(size, frames, max_time_value=2)
     print(f"[INFO] Input data created: shape {input_data.shape}, dtype {input_data.dtype}")
 
     dataset = create_batched_dataset(input_data, batch_size)

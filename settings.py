@@ -14,21 +14,21 @@ specific_media_to_train = "yingyang.mp4"
 epochs_per_image = 2000
 
 # when generating the timelapse of the training, this will be its fps
-timelapse_fps = 40
+timelapse_fps = 50
 
 # the longest length of an image, for lanscape images its width will be this, height for portrait images
-image_longest_length = 65
+image_longest_length = 70
 
 """ Video training """
-frames_max = 40
+frames_max = 20
 video_predictions_fps = 10
-video_batch_size = 20_000 # image batch size is by defualt the maximum #todo
+video_batch_size = 10_000 # image batch size is by defualt the maximum #todo
 
  # creating the model we use for training
 config = ModelConfig(
-    input_dim=8,
-    hidden_layers=8,
-    hidden_units=70,
+    input_dim=28,
+    hidden_layers=7,
+    hidden_units=125,
     w0=1.0,
     w0_initial=30.0,
     final_activation='sigmoid'

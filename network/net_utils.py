@@ -66,35 +66,45 @@ def load_image_from_file(image_path: str, desired_shortest_side: int) -> tuple[n
     new_size = (int(w * scale), int(h * scale))
     return cv2.resize(img, new_size, interpolation=cv2.INTER_CUBIC), new_size
 
-# Function to load a single video
-def load_video_from_file(video_path: str, desired_shortest_side: int, frame_count) -> tuple[np.ndarray, tuple]:
+# Function to load a single videoimport cv2
+import numpy as np
+
+def load_video_from_file(video_path: str, desired_shortest_side: int, frame_count: int) -> tuple[np.ndarray, tuple]:
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise ValueError(f"Video at {video_path} could not be read.")
     
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    selected_indices = np.linspace(0, total_frames - 1, frame_count).astype(int)
+    
     frames = []
     new_size = (0, 0)
+    current_index = 0
+    selected_pos = 0  # index in selected_indices
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        
-        # Convert each frame to RGB and resize
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        h, w = frame.shape[:2]
-        if h < w:
-            scale = desired_shortest_side / h
-        else:
-            scale = desired_shortest_side / w
-        
-        new_size = (int(w * scale), int(h * scale))
-        resized_frame = cv2.resize(frame, new_size, interpolation=cv2.INTER_CUBIC)
-        frames.append(resized_frame)
-    
+    while selected_pos < len(selected_indices) and current_index < total_frames:
+        if current_index == selected_indices[selected_pos]:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, current_index)
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w = frame.shape[:2]
+
+            # Scale preserving aspect ratio
+            scale = desired_shortest_side / min(h, w)
+            new_size = (int(w * scale), int(h * scale))
+            resized_frame = cv2.resize(frame, new_size, interpolation=cv2.INTER_CUBIC)
+
+            frames.append(resized_frame)
+            selected_pos += 1
+
+        current_index += 1
+
     cap.release()
-    reduced = reduce_video_to_frame_count(np.array(frames), frame_count)
-    return reduced, new_size  # Return a numpy array of frames
+    return np.array(frames), new_size
+
 
 
 def reduce_video_to_frame_count(video_array: np.ndarray, frame_count: int) -> np.ndarray:
@@ -160,41 +170,70 @@ def get_window_dims():
     return width, height
 
 
-def create_input_data(image_size : tuple) -> np.ndarray:
+
+def add_fourier_features(values: np.ndarray, freqs: list[float]) -> np.ndarray:
+    """Applies Fourier feature mapping to the given values."""
+    features = []
+    for freq in freqs:
+        features.append(np.sin(2 * np.pi * freq * values))
+        features.append(np.cos(2 * np.pi * freq * values))
+    return np.concatenate(features, axis=1)
+
+
+def create_input_data(image_size: tuple, fourier_freqs_xy=[1, 2, 4, 8]) -> np.ndarray:
     size_x, size_y = image_size
-    
-    # cartesian coordinates
-    x, y = np.meshgrid(np.linspace(0, 1, size_x), np.linspace(0, 1, size_y), indexing='xy')
-    
-    input_space_TL = np.column_stack((x.ravel(), y.ravel()))
-    input_space_BR = np.column_stack(((1 - x).ravel(), (1 - y).ravel()))
-    
-    # polar coordinates
-    dx, dy = x - 0.5, y - 0.5
-    r = np.sqrt(dx**2 + dy**2)
-    theta = np.arctan2(dy, dx)
-    polar_space = np.column_stack((r.ravel(), np.sin(theta).ravel(), np.cos(theta).ravel()))
-    time_space = np.zeros((size_x * size_y, 1))
 
-    # adding them all together
-    return np.concatenate((input_space_TL, input_space_BR, polar_space, time_space), axis=1)
+    # Normalized coordinates centered at (0,0), range [-1, 1]
+    x, y = np.meshgrid(
+        np.linspace(-1, 1, size_x),
+        np.linspace(-1, 1, size_y),
+        indexing='xy'
+    )
+    x_flat = x.ravel().reshape(-1, 1)
+    y_flat = y.ravel().reshape(-1, 1)
 
-def create_video_input_data(image_size: tuple, frames: int) -> np.ndarray:
-    """Creates input data for a video where each frame has time embedded in the input features."""
-    base_input = create_input_data(image_size)
+    # Polar coordinates
+    r = np.sqrt(x_flat**2 + y_flat**2)
+    theta = np.arctan2(y_flat, x_flat)
+    polar_space = np.concatenate([r, np.sin(theta), np.cos(theta)], axis=1)
+
+    # Fourier-encoded spatial features
+    xy = np.concatenate([x_flat, y_flat], axis=1)
+    xy_fourier = add_fourier_features(xy, fourier_freqs_xy)
+
+    # Placeholder for time (to be filled in later)
+    time_column = np.zeros((x_flat.shape[0], 1))
+
+    return np.concatenate([xy, polar_space, xy_fourier, time_column], axis=1)
+
+
+def create_video_input_data(
+    image_size: tuple,
+    frames: int,
+    max_time_value=1.0,
+    fourier_freqs_xy=[1, 2, 4, 8],
+    fourier_freqs_t=[1, 2, 4]
+) -> np.ndarray:
+    base_input = create_input_data(image_size, fourier_freqs_xy)
     num_pixels = image_size[0] * image_size[1]
-    
-    # Index of the time column (last column in base_input)
     time_column_index = base_input.shape[1] - 1
-    
-    video_input = np.repeat(base_input[None, :, :], frames, axis=0)  # shape: (frames, num_pixels, features)
 
-    # Add time encoding to each frame
+    video_input = np.repeat(base_input[None, :, :], frames, axis=0)
+
+    # Add time values and Fourier-encoded time features
+    time_features = []
     for i in range(frames):
-        time_value = i / (frames - 1) if frames > 1 else 0.0
-        video_input[i, :, time_column_index] = time_value
+        t = (i / (frames - 1)) * max_time_value if frames > 1 else 0.0
+        video_input[i, :, time_column_index] = t
+        time_features.append(add_fourier_features(np.full((num_pixels, 1), t), fourier_freqs_t))
 
-    return video_input.reshape(-1, base_input.shape[1])  # Flatten to (frames * num_pixels, features)
+    time_features_stacked = np.stack(time_features, axis=0)  # shape: (frames, num_pixels, time_features)
+    
+    # Final concatenation
+    video_input = np.concatenate([video_input, time_features_stacked], axis=2)
+
+    return video_input.reshape(-1, video_input.shape[2])  # (frames * pixels, features)
+
 
 
 

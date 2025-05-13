@@ -96,7 +96,7 @@ class NeuralImageGenerator:
         name, extension = os.path.splitext(specific_media_to_train)
         extension = extension.lstrip('.')
 
-        images = ["png", "jpeg"]
+        images = ["png", "jpg"]
         videos = ["mp4", "wav"]
         is_training_images = extension in images
 
