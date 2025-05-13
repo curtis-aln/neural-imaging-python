@@ -26,10 +26,12 @@ class NeuralImageGenerator:
     def __init__(self):
         self.specific_path = ''
         if specific_media_to_train != "":
-            media, name, self.is_training_images = self.load_specific_media()
-            print(Fore.YELLOW + f"Sucesfully loaded the specified '{specific_media_to_train}' media")
-            self.training_media = [media]
-            self.training_names = [name]
+            specific_media, speicfic_name, self.is_training_images = self.load_specific_media()
+            print(Fore.YELLOW + f"Sucesfully loaded the specified '{specific_media_to_train}' media" + Style.RESET_ALL)
+            
+            # since we only loaded one media we still need it to comply with how the rest of the code is structured
+            self.training_media = [specific_media]
+            self.training_names = [speicfic_name]
         
         else:
             self.training_media, self.training_names, self.is_training_images = self.load_media_info_from_folder()
@@ -108,7 +110,7 @@ class NeuralImageGenerator:
             media, size = load_image_from_file(self.specific_path, image_longest_length)
         else:
             self.specific_path = video_dataset_path + specific_media_to_train
-            media, size = load_all_media_from_folder(self.specific_path, image_longest_length, frames_max)
+            media, size = load_video_from_file(self.specific_path, image_longest_length, frames_max)
         
         return media, name, is_training_images
 

@@ -13,6 +13,10 @@ from colorama import Fore, Style
 import tkinter as tk
 
 import sys
+# todo orginize
+from progress_bar import ProgressBar
+
+import gc
 
 
 class SingleLineLogger(tf.keras.callbacks.Callback):
@@ -48,7 +52,8 @@ import numpy as np
 def load_image_from_file(image_path: str, desired_shortest_side: int) -> tuple[np.ndarray, tuple]:
     img = cv2.imread(image_path)
     if img is None:
-        raise ValueError(f"Image at {image_path} could not be read.")
+        text = f"Image at {image_path} could not be read."
+        raise ValueError(text)
     
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
@@ -212,24 +217,68 @@ def normalize_and_reshape_media(media, is_image):
     flattened = normalized.reshape(shape[0] * shape[1] * shape[2], shape[3])
     return flattened
 
+
 def reshape_normalized_back_to_media(flat_data, original_shape):
+    """
+    Reshape flattened normalized data into media (uint8).
+    Supports both full video and single-frame input.
+    
+    - flat_data: (frames * height * width, 3) or (height * width, 3)
+    - original_shape: (frames, height, width, 3) or (1, height, width, 3)
+    """
+    dims = len(original_shape)
+    if dims != 4:
+        raise ValueError("original_shape must be 4D (frames, height, width, 3)")
+
     frames, height, width, _ = original_shape
-    reshaped = flat_data.reshape(frames, height, width, 3)
+    pixels_per_frame = height * width
+
+    if flat_data.shape[0] == pixels_per_frame:
+        # Single frame
+        reshaped = flat_data.reshape(height, width, 3)
+    elif flat_data.shape[0] == frames * pixels_per_frame:
+        # Full video
+        reshaped = flat_data.reshape(frames, height, width, 3)
+    else:
+        raise ValueError(f"Input shape mismatch: expected {pixels_per_frame} or {frames * pixels_per_frame} pixels, got {flat_data.shape[0]}")
+
     return (reshaped * 255).astype(np.uint8)
 
-def save_flat_predictions_as_video(flat_predictions, output_path, original_shape, frame_rate=30):
-    # Reconstruct original video tensor
-    reconstructed = reshape_normalized_back_to_media(flat_predictions, original_shape)
-    print("Video data reshaped")
-    
-    num_frames, height, width, _ = reconstructed.shape
+
+
+def save_flat_predictions_as_video(flat_predictions, output_path, original_shape, frame_rate=30, extra_info=True):
+    num_frames, height, width, _ = original_shape
+
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(output_path, fourcc, frame_rate, (width, height))
 
-    print(reconstructed.shape)
-    for i in range(num_frames):
-        frame = reconstructed[i]
-        out.write(frame)
-    out.release()
+    if extra_info:
+        progress = ProgressBar(total=num_frames, prefix='Saving video', suffix='frames')
 
-    print(Fore.MAGENTA + f"video saved to {output_path}" + Style.RESET_ALL) 
+    pixels_per_frame = height * width
+    for i in range(num_frames):
+        start = i * pixels_per_frame
+        end = (i + 1) * pixels_per_frame
+
+        # Shape: (pixels, 3)
+        frame_flat = flat_predictions[start:end]
+        
+        # Reshape to (height, width, 3)
+        frame = frame_flat.reshape((height, width, 3))
+        
+        # Convert from float32 (0..1) to uint8 (0..255) if needed
+        if frame.dtype != np.uint8:
+            frame = np.clip(frame * 255, 0, 255).astype(np.uint8)
+
+        out.write(frame)
+
+        if extra_info:
+            progress.update(i + 1)
+
+        # Optional: release memory if needed
+        del frame, frame_flat
+        gc.collect()
+
+    out.release()
+    print(Fore.MAGENTA + f"Video saved to {output_path}" + Style.RESET_ALL)
+

@@ -28,6 +28,7 @@ media/final_images/
 # model save files
 model_saves/
 
+line_counter.py
 TODO.md
 test.py
 
