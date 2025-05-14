@@ -44,10 +44,12 @@ class NeuralImageGenerator:
         self.normalized_media = [normalize_and_reshape_media(media, self.is_training_images) for media in self.training_media]
 
         # creating the input data from the media sizes | automatically adjusts for videos
+        forier_freqs = generate_fourier_frequencies(forier_count)
         if self.is_training_images:
-            self.input_space = [create_input_data(size) for size in self.media_frame_sizes]
+            self.input_space = [create_input_data(size, forier_freqs) for size in self.media_frame_sizes]
         else:
-            self.input_space = [create_video_input_data(size, video.shape[0]) for size, video in zip(self.media_frame_sizes, self.training_media)]
+            self.input_space = [create_video_input_data(size, video.shape[0], 1, forier_freqs, forier_freqs) 
+                                for size, video in zip(self.media_frame_sizes, self.training_media)]
 
         # creating the training datasets
         self.datasets = [self.create_dataset(inp, norm) for inp, norm in zip(self.input_space, self.normalized_media)]
@@ -239,7 +241,7 @@ class NeuralImageGenerator:
     def create_dataset(self, inp_data, normalised_img):
         dataset = tf.data.Dataset.from_tensor_slices((inp_data, normalised_img))
 
-        batch_size = inp_data.shape[0] if self.is_training_images else video_batch_size
+        #batch_size = batch_size #inp_data.shape[0] if self.is_training_images else batch_size
         dataset = dataset.batch(batch_size)
         return dataset
 

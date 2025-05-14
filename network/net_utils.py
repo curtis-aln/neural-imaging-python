@@ -179,6 +179,9 @@ def add_fourier_features(values: np.ndarray, freqs: list[float]) -> np.ndarray:
         features.append(np.cos(2 * np.pi * freq * values))
     return np.concatenate(features, axis=1)
 
+def generate_fourier_frequencies(n: int) -> list[int]:
+    return [2 ** i for i in range(n)]
+
 
 def create_input_data(image_size: tuple, fourier_freqs_xy=[1, 2, 4, 8]) -> np.ndarray:
     size_x, size_y = image_size
